@@ -1467,7 +1467,7 @@ Write-LogMessage -type Info -MSG "Starting Onboard BuiltIn Admin Script." -Heade
 $gitHubLatestVersionParameters = @{
     currentVersion = $ScriptVersion;
     repositoryName = "pCloudServices/OnboardBuiltInAdmin";
-    scriptVersionFileName = "PrivCloud-OnboardBuiltInAdminAcc.ps1";
+    scriptVersionFileName = "PrivCloud_OnboardBuiltInAdminAcc.ps1";
     sourceFolderPath = $PSScriptRoot;
     
     # More parameters that can be used
