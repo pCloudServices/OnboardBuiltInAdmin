@@ -12,20 +12,20 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$False)]
-    [ValidateSet("cyberark","ldap")]
+    [ValidateSet("cyberark")]
     [string]$AuthType = "cyberark",
     [Parameter(Mandatory=$false)]
     [Switch]
     $SkipVersionCheck
 )
 
-$Script:LOG_FILE_PATH = "$PSScriptRoot\_PrivCloud_OnboardBuiltInAdminAcc.log"
-$script:CONFIG_PARAMETERS_FILE = "$PSScriptRoot\_PrivCloud_OnboardBuiltInAdminAcc.ini"
-$script:PlatformID = "CyberArkPrivCloud"
-$script:PSMCCID = "PSM-PVWA-v122"
-$script:PSMCCDiscID = "PSM-PVWA-v122-Disc"
-$script:SafeName = "CyberArk_{0}_ADM"
-$script:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+$global:LOG_FILE_PATH = "$PSScriptRoot\_PrivCloud_OnboardBuiltInAdminAcc.log"
+$global:CONFIG_PARAMETERS_FILE = "$PSScriptRoot\_PrivCloud_OnboardBuiltInAdminAcc.ini"
+$global:PlatformID = "CyberArkPrivCloud"
+$global:PSMCCID = "PSM-PVWA-v122"
+$global:PSMCCDiscID = "PSM-PVWA-v122-Disc"
+$global:SafeName = "CyberArk_{0}_ADM"
+$global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
 # Script Version
 $ScriptVersion = "1.0"
@@ -717,35 +717,38 @@ Function Set-PVWAURL{
     }
     
     # Set the PVWA URLS
-    $script:URL_PVWA = "https://"+([System.Uri]$PVWAurl).Host
+    $global:URL_PVWA = "https://"+([System.Uri]$PVWAurl).Host
     $global:subdomain = ([System.Uri]$PVWAurl).Host.Split(".")[0]
     $URL_PVWAPasswordVault = $URL_PVWA+"/passwordVault"
     $URL_PVWAAPI = $URL_PVWAPasswordVault+"/api"
     $URL_PVWAAuthentication = $URL_PVWAAPI+"/auth"
-    $script:URL_PVWALogon = $URL_PVWAAuthentication+"/$AuthType/Logon"
-    $script:URL_PVWALogoff = $URL_PVWAAuthentication+"/Logoff"
+    $global:URL_PVWALogon = $URL_PVWAAuthentication+"/$AuthType/Logon"
+    $global:URL_PVWALogoff = $URL_PVWAAuthentication+"/Logoff"
     Write-LogMessage -type debug -Msg "Logon URL will be: '$URL_PVWALogon'"
     # URL Methods
     # -----------
-    $script:URL_Users = $URL_PVWAAPI+"/Users"
-    $script:URL_Accounts = $URL_PVWAAPI+"/Accounts"
-    $script:URL_AccountVerify = $URL_Accounts+"/{0}/Verify"
-    $script:URL_UsersGroups = $URL_PVWAAPI+"/UserGroups"
-    $script:URL_Safes = $URL_PVWAAPI+"/Safes"
-    $script:URL_SafeFind = $URL_PVWAPasswordVault+"/WebServices/PIMServices.svc/Safes?query={0}"
-    $script:URL_SafeAddMembers = $URL_Safes+"/{0}/Members"
-    $script:URL_SafesUnderPlatform = $URL_PVWAAPI+"/Platforms/{0}/Safes" #TO-DO not sure this is needed
-    $script:URL_SystemHealthComponent =  $URL_PVWAAPI+"/ComponentsMonitoringDetails/{0}"
-    $script:URL_UserSetGroup = $URL_UsersGroups+"/{0}/Members"
-    $script:URL_UserDelGroup = $URL_UsersGroups+"/{0}/Members/{1}"
-    $script:URL_UserExtendedDetails = $URL_Users+"/{0}"
-    $script:URL_PlatformVerify = $URL_PVWAAPI+"/Platforms/{0}"
-    $script:URL_PlatformImport =  $URL_PVWAAPI+"/Platforms/Import"
-    $script:URL_ConnectionComponentVerify = $URL_PVWAAPI+"/connectioncomponents/{0}"
-    $script:URL_ConnectionComponentImport = $URL_PVWAAPI+"/connectioncomponents/import"
-    $script:URL_SystemHealthComponent =  $URL_PVWAAPI+"/ComponentsMonitoringDetails/{0}"
-    $script:URL_DomainDirectories = $URL_PVWAAPI+"/Configuration/LDAP/Directories"
-    $script:URL_VaultMappings = $URL_PVWAAPI+"/Configuration/LDAP/Directories/{0}/mappings"
+    $global:URL_Users = $URL_PVWAAPI+"/Users"
+    $global:URL_Accounts = $URL_PVWAAPI+"/Accounts"
+    $global:URL_AccountVerify = $URL_Accounts+"/{0}/Verify"
+    $global:URL_UsersGroups = $URL_PVWAAPI+"/UserGroups"
+    $global:URL_Safes = $URL_PVWAAPI+"/Safes"
+    $global:URL_SafeFind = $URL_PVWAPasswordVault+"/WebServices/PIMServices.svc/Safes?query={0}"
+    $global:URL_SafeAddMembers = $URL_Safes+"/{0}/Members"
+    $global:URL_SafesUnderPlatform = $URL_PVWAAPI+"/Platforms/{0}/Safes" #TO-DO not sure this is needed
+    $global:URL_SystemHealthComponent =  $URL_PVWAAPI+"/ComponentsMonitoringDetails/{0}"
+    $global:URL_UserSetGroup = $URL_UsersGroups+"/{0}/Members"
+    $global:URL_UserDelGroup = $URL_UsersGroups+"/{0}/Members/{1}"
+    $global:URL_UserExtendedDetails = $URL_Users+"/{0}"
+    $global:URL_PlatformVerify = $URL_PVWAAPI+"/Platforms/{0}"
+    $global:URL_PlatformImport =  $URL_PVWAAPI+"/Platforms/Import"
+    $global:URL_PlatformsFindAll = $URL_PVWAAPI+"/platforms/targets"
+    $global:URL_ConnectionComponentVerify = $URL_PVWAAPI+"/connectioncomponents/{0}"
+    $global:URL_ConnectionComponentImport = $URL_PVWAAPI+"/connectioncomponents/import"
+    $global:URL_PlatformUpdatePSM = $URL_PVWAAPI+"/Platforms/Targets/{0}/PrivilegedSessionManagement"
+    $global:URL_GetallPSMs = $URL_PVWAAPI + "/PSM/Servers"
+    $global:URL_SystemHealthComponent =  $URL_PVWAAPI+"/ComponentsMonitoringDetails/{0}"
+    $global:URL_DomainDirectories = $URL_PVWAAPI+"/Configuration/LDAP/Directories"
+    $global:URL_VaultMappings = $URL_PVWAAPI+"/Configuration/LDAP/Directories/{0}/mappings"
     
 }
 
@@ -806,7 +809,7 @@ Function Invoke-Logon{
         IgnoreCertErrors
         # Login to PVWA
         Write-LogMessage -type Info -MSG "START Logging in to PVWA."
-        $script:pvwaLogonHeader = Get-LogonHeader -Credentials $creds
+        $global:pvwaLogonHeader = Get-LogonHeader -Credentials $creds
         if($pvwaLogonHeader.Keys -contains "Authorization"){Write-LogMessage -type Info -MSG "FINISH Logging in to PVWA."}
     } catch {
         Throw $(New-Object System.Exception ("Error logging on to PVWA",$_.Exception))
@@ -967,8 +970,8 @@ function Get-Choice {
         Write-Warning "DefaultChoice needs to be a value between 1 and $($Options.Count) or -1 (for none)"
         exit
     }
-    Add-Type â€“AssemblyName System.Windows.Forms
-    Add-Type â€“AssemblyName System.Drawing
+    Add-Type –AssemblyName System.Windows.Forms
+    Add-Type –AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $script:result = ""
     $form = New-Object System.Windows.Forms.Form
@@ -989,13 +992,13 @@ function Get-Choice {
     $buttonWidth = [Math]::Max($minButtonWidth, $buttonWidth)
     $formWidth =  [Windows.Forms.TextRenderer]::MeasureText($Title,$form.Font).Width
     $spaceWidth = ($options.Count+1) * $spacing
-    $formWidth = ($formWidth, $minFormWidth, ($buttonWidth * $Options.Count + $spaceWidth) | Measure-Object â€“Maximum).Maximum
+    $formWidth = ($formWidth, $minFormWidth, ($buttonWidth * $Options.Count + $spaceWidth) | Measure-Object –Maximum).Maximum
     $form.ClientSize = New-Object System.Drawing.Size($formWidth,$formHeight)
     $index = 0
     #create the buttons dynamically based on the options
     foreach ($option in $Options){
-        Set-Variable "button$index" â€“Value (New-Object System.Windows.Forms.Button)
-        $temp = Get-Variable "button$index" â€“ValueOnly
+        Set-Variable "button$index" –Value (New-Object System.Windows.Forms.Button)
+        $temp = Get-Variable "button$index" –ValueOnly
         $temp.Size = New-Object System.Drawing.Size($buttonWidth,$buttonHeight)
         $temp.UseVisualStyleBackColor = $True
         $temp.Text = $option
@@ -1060,7 +1063,7 @@ $BuiltIndAdminUserId = $GetUsersResponse.users.id
 }
 
 #Get user extended details to check if in Auditor group. (Compatible with 11.7 - 12.2)
-$script:GetUserDetailsResponse = Invoke-RestMethod -Method Get -Uri ($URL_UserExtendedDetails -f $BuiltIndAdminUserId) -Headers $pvwaLogonHeader -ContentType "application/json" -TimeoutSec 2700
+$global:GetUserDetailsResponse = Invoke-RestMethod -Method Get -Uri ($URL_UserExtendedDetails -f $BuiltIndAdminUserId) -Headers $pvwaLogonHeader -ContentType "application/json" -TimeoutSec 2700
 
 
 
@@ -1295,7 +1298,7 @@ Function Get-LDAPVaultAdmins{
 # Name...........: Get-CPMName
 # Description....: Check Systemhealth and find a connected CPM to use for Safe Creation
 # Parameters.....: 
-# Return Values..: 
+# Return Values..: FirstCPM
 # =================================================================================================================================
 Function Get-CPMName{
     Param($Uri)
@@ -1306,7 +1309,6 @@ Function Get-CPMName{
         $global:FirstCPM = ($GetSystemHealthResponse.ComponentsDetails | where {$_.IsLoggedOn -eq 'True'}).ComponentUserName
     }
     Catch{
-    Write-LogMessage -type Error -MSG "$($Error[0])"
     Write-LogMessage -type Error -MSG ("Cannot get '$GetSystemHealthResponse' status. Error: $($_.Exception.Response.StatusDescription)",$_.Exception)
     }
         if($FirstCPM.count -eq 0){
@@ -1403,7 +1405,7 @@ Write-LogMessage -type Info -MSG "Creating account `"$AdminUsername`""
     "SafeName" = $safeName
     "PlatformID" = $PlatformID
     "secretType" = "password"
-    "secret" = $creds.GetNetworkCredential().password
+    "secret" = ($creds.GetNetworkCredential().password)
         "PlatformAccountProperties" = @{
                 "PSMRemoteMachine" = $subdomain
         }
@@ -1427,13 +1429,143 @@ Write-LogMessage -type Info -MSG "Creating account `"$AdminUsername`""
         Write-LogMessage -type Info -MSG "Sending account for password **verification**, pleast wait at least 2 mins and then check the account in the portal if it was successfully verified."
     }
     $creds = $null
+	$AccBody = $null
 }
 
-#$global:adminusername = "TestAccount01"
-#$global:safeName = ($SafeName -f "TestBuiltIn13")
-#$global:address = "vault-$subdomain.privilegecloud.cyberark.com"
+# @FUNCTION@ ======================================================================================================================
+# Name...........: Update-ZipWithnewChrome
+# Description....: Updates the zip file with BrowserPath entry
+# Parameters.....: File_Path, BrowserPath
+# Return Values..: 
+# =================================================================================================================================
+Function Update-ZipWithnewChrome{
+        Param($file_path,$BrowserPath)
 
-# -----------------------------------
+Write-LogMessage -type Info -MSG "Detected non 32bit chrome is installed, will update PSM CC before importing it to PVWA."
+    Try{
+    $Package = Get-Item -Path $File_Path
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # Extract ZIP to temp folder logic
+    $tempFolder = Join-Path -Path $Package.Directory -ChildPath $Package.BaseName
+    
+    #Remove folder if it exists already before unzipping 
+    if (Test-Path $tempFolder)
+    {
+    	Remove-Item -Recurse $tempFolder -Force
+    }	
+    #Unzip to temp folder
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($Package.FullName,$tempFolder)
+    
+    # Find all XML files in the ConnectionComponent ZIP
+    $fileEntries = Get-ChildItem -Path $tempFolder -Filter '*.xml'
+    
+    #Read XML file
+    [xml]$xmlContent = Get-Content $fileEntries[0].FullName
+    #Add custom Chrome Path
+    $xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.InnerXml += "<Parameter Name='BrowserPath' Value='$BrowserPath'/>"
+    $xmlContent.Save($fileEntries[0].FullName)
+
+    #Zip the file back again.
+    $UpdateZip = [System.IO.Compression.ZipFile]::Open($file_path,[System.IO.Compression.ZipArchiveMode]::Update)
+    #If the file already contains the customer entry, delete it since we are importing it again.
+    Try{
+        foreach ($entry in ($UpdateZip.Entries | where {$_.Name -eq $fileEntries[0].Name})){
+            $UpdateZip.Entries[3].Delete()
+            }
+        }Catch{}
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($UpdateZip,$fileEntries[0].FullName,$fileEntries[0].Name) | Out-Null
+    $UpdateZip.Dispose()
+    
+    #Delete temporary File
+    Remove-Item $tempFolder -Recurse
+    }
+    Catch{
+    Write-LogMessage -type Error -MSG $_.Exception
+    }
+}
+
+# @FUNCTION@ ======================================================================================================================
+# Name...........: Get-PSMName
+# Description....: Get a list of all PSMs and use the first one to bind to Platform.
+# Parameters.....: 
+# Return Values..: FirstPSM
+# =================================================================================================================================
+Function Get-PSMName{
+    
+    Write-LogMessage -type Info -MSG "Getting valid PSM so we can bind it to platform."
+    Try{
+        $response = Invoke-RestMethod -Uri $URL_GetallPSMs -Headers $pvwaLogonHeader -Method Get -TimeoutSec 2700
+        
+        $global:FirstPSM = ($response.PSMServers.ID[0])
+    }
+    Catch{
+    Write-LogMessage -type Error -MSG $_.Exception
+    }
+}
+
+# @FUNCTION@ ======================================================================================================================
+# Name...........: UpdatePlatformPSM
+# Description....: Update the platform and add a healthy PSM instead of "PSMServer" default PSM.
+# Parameters.....: 
+# Return Values..: 
+# =================================================================================================================================
+Function UpdatePlatformPSM{
+    param($FirstPSM)
+    
+$Body = @"
+{
+    "PSMServerId" : "$FirstPSM",
+    "PSMServerName" : "$FirstPSM",
+        "PSMConnectors" :  [
+            {
+                "PSMConnectorId" : "$PSMCCID",
+                "Enabled" : "true"
+            },
+            {
+                "PSMConnectorId" : "$PSMCCDiscID",
+                "Enabled" : "true"
+            }
+      ]        
+    }
+"@
+    
+    Try{
+        $allplatformsresponse = Invoke-RestMethod -Method Get -Uri $URL_PlatformsFindAll -Headers $pvwaLogonHeader
+        $PlatformNumId = $allplatformsresponse.Platforms | where {$_.platformid -eq $PlatformID} | select -ExpandProperty ID
+        
+        Write-LogMessage -type Info -MSG "Updating Platform with valid PSM instance."
+        
+        $Response = Invoke-RestMethod -Uri ($URL_PlatformUpdatePSM -f $PlatformNumId) -Headers $pvwaLogonHeader -Method Put -ContentType "application/json" -Body $Body -TimeoutSec 2700
+        }
+        Catch{
+        Write-LogMessage -type Error -MSG $_.Exception
+        }
+}
+
+Function ConvertTo-URL($sText)
+{
+<# 
+.SYNOPSIS 
+	HTTP Encode test in URL
+.DESCRIPTION
+	HTTP Encode test in URL
+.PARAMETER sText
+	The text to encode
+#>
+	if (![string]::IsNullOrEmpty($sText))
+	{
+		Write-Debug "Returning URL Encode of $sText"
+		return [URI]::EscapeDataString($sText)
+	}
+	else
+	{
+		return $sText
+	}
+}
+
+
+
+# ------------------------------------------------------------
 # Script Begins Here
 If ($(IsUserAdmin) -eq $False)
 {
@@ -1527,7 +1659,6 @@ try{
         #Check if in Auditors Group and add yourself.
         Write-LogMessage -type Info -MSG "======================= START Auditor Flow ======================="
         Insert-AuditorsGroup
-       
         Write-LogMessage -type Info -MSG "======================= START Import Plugins Flow ======================="
         #Import CC and Bind it to Platform
         Foreach($psmcomp in @($PSMCCID,$PSMCCDiscID)){
@@ -1536,8 +1667,13 @@ try{
                 Write-LogMessage -type Success -MSG "Verified `"$psmcomp`" exists."
                 }
                 Else{
-                    Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
                     $File_Path = "$PSScriptRoot\$psmcomp.zip"
+                    #Check if Chrome exists and path32/64 and adjust it in the file.
+                    $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | select -ExpandProperty `(default`)
+                    if($DefaultChromePath -ne $actualChromePath){
+                        Update-ZipWithnewChrome -file_path $File_Path -BrowserPath $actualChromePath
+                    }
+                    Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
                     $Input_File = $(Read-File -File_Path $File_Path)
                     Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
                 }
@@ -1552,6 +1688,8 @@ try{
                 $File_Path = "$PSScriptRoot\$($Prerequisitefiles.CyberArkPrivCloudPlatform)"
                 $Input_File = $(Read-File -File_Path $File_Path)
                 Import -Input_File $Input_File -URL_Import $URL_PlatformImport -ComponentName $PlatformID
+                Get-PSMName
+                UpdatePlatformPSM -FirstPSM $FirstPSM
             }
         Write-LogMessage -type Info -MSG "======================= FINISH Import Plugins Flow ======================="
         #Onboard Account
@@ -1565,8 +1703,8 @@ try{
         #Get Healthy CPM
         Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
         Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
-        Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
-        Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
+        Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f "TestBuiltint01") -FirstCPM $FirstCPM
+        Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f "TestBuiltint01") -subdomain $subdomain
         Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
         }
         #Logoff
