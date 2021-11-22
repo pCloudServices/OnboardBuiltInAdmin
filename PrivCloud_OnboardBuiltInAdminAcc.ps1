@@ -845,11 +845,11 @@ Function Set-PVWAURL
     $script:URL_PlatformVerify = $URL_PVWAAPI + "/Platforms/{0}"
     $script:URL_PlatformImport = $URL_PVWAAPI + "/Platforms/Import"
     $script:URL_ConnectionComponentVerify = $URL_PVWAAPI + "/ConnectionComponents/{0}"
-    $script:URL_ConnectionComponentImport = $URL_PVWAAPI + "/ConnectionComponents/import"
+    $script:URL_ConnectionComponentImport = $URL_PVWAAPI + "/ConnectionComponents/Import"
+    $script:URL_GetAllPSMs = $URL_PVWAAPI + "/PSM/Servers"
     $script:URL_SystemHealthComponent = $URL_PVWAAPI + "/ComponentsMonitoringDetails/{0}"
     $script:URL_DomainDirectories = $URL_PVWAAPI + "/Configuration/LDAP/Directories"
     $script:URL_VaultMappings = $URL_PVWAAPI + "/Configuration/LDAP/Directories/{0}/mappings"
-    
 }
 
 # @FUNCTION@ ======================================================================================================================
