@@ -1068,7 +1068,7 @@ Function Insert-AuditorsGroup()
 {
     Write-LogMessage -MSG "Checking if user is part of Auditors group, this is needed to find out if the account was previously onboarded."
 
-    $global:IsUserInAduitGroup = $null
+    $global:IsUserInAuditGroup = $null
     $SearchUserURL = $URL_Users + "?filter==UserName&search=$s_BuiltInAdminUsername"
 
     #Find our user
@@ -1160,15 +1160,15 @@ Function Insert-AuditorsGroup()
 Function Extract-AuditorsGroup()
 {
     param($adminusername)
-    #if $IsUserInAduitGroup is empty, it means the script was interrupted, we need to check the .ini file.
-    if ($IsUserInAduitGroup -eq $null)
+    # if $IsUserInAuditGroup is empty, it means the script was interrupted, we need to check the .ini file.
+    if ($null -eq $IsUserInAuditGroup)
     {
         $parameters = Import-Clixml -Path $CONFIG_PARAMETERS_FILE
-        $global:IsUserInAduitGroup = $parameters.IsUserInAuditGroup
+        $global:IsUserInAuditGroup = $parameters.IsUserInAuditGroup
     }
-    #Check if use was in auditor group then do nothing, else we remove it.
+    # Check if use was in auditor group then do nothing, else we remove it.
     Write-LogMessage -MSG "Checking if user was in Auditors group."
-    if ($IsUserInAduitGroup -eq "True")
+    if ($IsUserInAuditGroup -eq "True")
     {
         Write-LogMessage -MSG "User was already part of the Auditor group, skipping..."
     }
@@ -1177,6 +1177,7 @@ Function Extract-AuditorsGroup()
         Write-LogMessage -MSG "Removing user from Auditors group as it wasn't there on the initial run."
         Try
         {
+            $body = @{MemberId = "" + $s_BuiltInAdminUsername + "" } | ConvertTo-Json -Compress
             $SetGroupResponse = Invoke-RestMethod -Method Delete -Uri ($URL_UserDelGroup -f $GetUserGroupsId, $adminusername) -Headers $s_pvwaLogonHeader -Body $body -ContentType "application/json" -TimeoutSec 2700
         }
         Catch
@@ -1740,24 +1741,24 @@ try
         $detectedComponent.InitPVWAURL
 
         # Set BuiltInAdmin Username, (in the future, maybe we'll want to onboard multiple accounts)
-        $s_BuiltInAdminUsername = ([System.Uri]$URL_PVWA).host.split(".")[0] + "_admin"
+        $script:s_BuiltInAdminUsername = ([System.Uri]$URL_PVWA).host.split(".")[0] + "_admin"
         $decision = Get-Choice -Title "Confirm User: `"$s_BuiltInAdminUsername`"" -Options "Yes", "No, let me type it" -DefaultChoice 1
         if ($decision -eq "Yes")
         {
-            Write-LogMessage -type Info -MSG "confirmed user: $s_BuiltInAdminUsername"
+            Write-LogMessage -type Info -MSG "Confirmed user: $s_BuiltInAdminUsername"
         }
         else
         {
-            $s_BuiltInAdminUsername = (Read-Host "Enter your CyberArk BuiltIn Admin Username").Trim()
+            $script:s_BuiltInAdminUsername = (Read-Host "Enter your CyberArk BuiltIn Admin Username").Trim()
         }
         
         # Login
         Invoke-Logon
 
         # Check if in Auditors Group and add yourself.
-        Write-LogMessage -type Info -MSG "======================= START Auditor Flow ======================="
+        Write-LogMessage -type Info -MSG "START Auditor Flow" -SubHeader
         Insert-AuditorsGroup
-        Write-LogMessage -type Info -MSG "======================= START Import Plugins Flow ======================="
+        Write-LogMessage -type Info -MSG "START Import Plugins Flow" -SubHeader
         # Import CC and Bind it to Platform
         Foreach ($psmcomp in @($PSMCCID, $PSMCCDiscID))
         {
@@ -1794,13 +1795,13 @@ try
             Import -Input_File $Input_File -URL_Import $URL_PlatformImport -ComponentName $PlatformID
             UpdatePlatformPSM -FirstPSM $(Get-PSMName)
         }
-        Write-LogMessage -type Info -MSG "======================= FINISH Import Plugins Flow ======================="
+        Write-LogMessage -type Info -MSG "FINISH Import Plugins Flow" -SubHeader
         #Onboard Account
-        Write-LogMessage -type Info -MSG "======================= START Onboarding Flow ======================="
+        Write-LogMessage -type Info -MSG "START Onboarding Flow" -SubHeader
         VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername
         #Check if in need to remove yourself from Auditors group.
         Extract-AuditorsGroup -adminusername $s_BuiltInAdminUsername
-        Write-LogMessage -type Info -MSG "======================= FINISH Auditor Flow ======================="
+        Write-LogMessage -type Info -MSG "FINISH Auditor Flow" -SubHeader
         if ($VerifyAccount.value.userName -ne $s_BuiltInAdminUsername)
         {
             Write-LogMessage -type Info -MSG "Not Found Account `"$s_BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
@@ -1809,7 +1810,7 @@ try
             Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
             Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f "TestBuiltint01") -FirstCPM $FirstCPM
             Create-Account -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f "TestBuiltint01") -subdomain $subdomain
-            Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
+            Write-LogMessage -type Info -MSG "FINISH Onboarding Flow" -SubHeader
         }
         #Logoff
         Invoke-Logoff
