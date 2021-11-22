@@ -1240,11 +1240,11 @@ Function VerifyAccount{
                 $errors += "Detected account was only recently onboarded but no attempt at change/verify password was made, please check the account and attempt password change/verify and rerun the script to confirm."
                 }
                 Else{
-                $errors += "Password rotation attempt was never triggered or didn't return a `"success`", find the account in the portal and check, once password is changed/verified you can rerun the script to confirm."
+                $errors += "Password change/verify attempt was never triggered or didn't return a `"success`", find the account in the portal and check, once password is changed/verified you can rerun the script to confirm."
                 }
             }
         Else{
-            $errors += "The account has `"Allow automatic password management`" disabled which prevents CPM from rotating the account, please check account status and enable password management."
+            $errors += "The account has `"Allow automatic password management`" disabled which prevents CPM from changing/verifying the account, please check account status and enable password management."
         }
         if($errors -ne $null){
             Write-LogMessage -type Error -MSG "Detected issues with the account, please fix below:"
@@ -1255,7 +1255,7 @@ Function VerifyAccount{
             Exit
         }
         Else{
-        Write-LogMessage -type Success -MSG "No issues found! You're all set."
+        Write-LogMessage -type Info -MSG "Account is onboarded! You're all set." -Header
         }
     }
 }
