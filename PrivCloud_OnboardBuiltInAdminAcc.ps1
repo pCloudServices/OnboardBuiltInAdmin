@@ -1255,7 +1255,7 @@ Function VerifyAccount{
             Exit
         }
         Else{
-        Write-LogMessage -type Info -MSG "Account is onboarded! You're all set." -Header
+        Write-LogMessage -type Info -MSG "Account is onboarded and no issues found! You're all set." -Header
         }
     }
 }
