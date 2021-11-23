@@ -1426,7 +1426,7 @@ Write-LogMessage -type Info -MSG "Creating account `"$AdminUsername`""
         Write-Host ""
         Write-Host ""
         #This will happen because platform is set to verifyonadd = yes
-        Write-LogMessage -type Info -MSG "Sending account for password **verification**, pleast wait at least 2 mins and then check the account in the portal if it was successfully verified."
+        Write-LogMessage -type Info -MSG "Sending account for password **verification**, pleast wait at least 2 mins and then check the account in the portal if it was successfully verified." -Header
     }
     $creds = $null
 	$AccBody = $null
@@ -1462,7 +1462,9 @@ Write-LogMessage -type Info -MSG "Detected non 32bit chrome is installed, will u
     #Read XML file
     [xml]$xmlContent = Get-Content $fileEntries[0].FullName
     #Add custom Chrome Path
+    if($xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.Parameter.name -notcontains "BrowserPath"){
     $xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.InnerXml += "<Parameter Name='BrowserPath' Value='$BrowserPath'/>"
+    }
     $xmlContent.Save($fileEntries[0].FullName)
 
     #Zip the file back again.
@@ -1703,8 +1705,8 @@ try{
         #Get Healthy CPM
         Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
         Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
-        Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f "TestBuiltint01") -FirstCPM $FirstCPM
-        Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f "TestBuiltint01") -subdomain $subdomain
+        Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
+        Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
         Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
         }
         #Logoff
