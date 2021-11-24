@@ -29,6 +29,7 @@ $global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\ch
 
 # Script Version
 $ScriptVersion = "1.0"
+$debug = $true
 
 #region Log functions
 # @FUNCTION@ ======================================================================================================================
@@ -658,7 +659,14 @@ Function Invoke-Logon
         IgnoreCertErrors
         # Login to PVWA
         Write-LogMessage -type Info -MSG "START Logging in to PVWA."
-        $script:s_pvwaLogonHeader = Get-LogonHeader -Credentials $creds
+        if($debug)
+        {
+            $script:s_pvwaLogonHeader = @{ Authorization="MyToken" }
+        }
+        else 
+        {    
+            $script:s_pvwaLogonHeader = Get-LogonHeader -Credentials $creds
+        }
         if ($s_pvwaLogonHeader.Keys -contains "Authorization") { Write-LogMessage -type Info -MSG "FINISH Logging in to PVWA." }
     }
     catch
@@ -759,7 +767,7 @@ Function Set-PVWAURL
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [ValidateSet("CPM", "PSM")]
+        [ValidateSet("CPM", "PSM","Debug")]
         [string]$ComponentID,
         [Parameter(Mandatory = $False)]
         [string]$ConfigPath,
@@ -805,6 +813,10 @@ Function Set-PVWAURL
                     $PVWAurl = $GetPVWAStringURL
                     $foundConfig = $true
                 }
+            }
+            if($ComponentID -eq "Debug")
+            {
+                $PVWAurl = "https://myPVWA.mydomain.com/PasswordVault"
             }
         }
         # We Couldn't find PVWA URL so we prompt the user
@@ -868,7 +880,7 @@ Function Find-Components
 #>
     param(
         [Parameter(Mandatory = $false)]
-        [ValidateSet("All", "CPM", "PSM")]
+        [ValidateSet("All", "CPM", "PSM", "Debug")]
         [String]$Component = "All",
         [switch]$FindOne
     )
@@ -941,11 +953,40 @@ Function Find-Components
                     }
                     break
                 }
+                "Debug"
+                {
+                    if($debug)
+                    {
+                        try
+                        {
+                            # Check if PSM is installed
+                            Write-LogMessage -Type "Debug" -MSG "Searching for Debug..."
+    
+                                Write-LogMessage -Type "Info" -MSG "Found Debug installation."
+                                $PSMPath = "C:\Temp"
+                                $ConfigPath = (Join-Path -Path $PSMPath -ChildPath "temp\PVConfiguration.xml")
+                                $myObject = New-Object PSObject -Property @{
+                                    Name        = "Debug"; 
+                                    DisplayName = "Debug";
+                                    Path        = $PSMPath;
+                                    ConfigPath  = $ConfigPath;
+                                }
+                                $myObject | Add-Member -MemberType ScriptMethod -Name InitPVWAURL -Value { Set-PVWAURL -ComponentID $this.Name -ConfigPath $this.ConfigPath -AuthType "cyberark" } | Out-Null
+                                return $myObject
+                            
+                        }
+                        catch
+                        {
+                            Write-LogMessage -Type "Error" -Msg "Error detecting $Component component. Error: $(Join-ExceptionMessage $_.Exception)"
+                        }
+                    }
+                    break
+                }
                 "All"
                 {
                     try
                     {
-                        ForEach ($comp in @("CPM", "PSM"))
+                        ForEach ($comp in @("CPM", "PSM","Debug"))
                         {
                             $retArrComponents += Find-Components -Component $comp -FindOne:$FindOne
                             if ($FindOne -and $retArrComponents.Count -gt 0)
@@ -1068,7 +1109,7 @@ Function Insert-AuditorsGroup()
 {
     Write-LogMessage -MSG "Checking if user is part of Auditors group, this is needed to find out if the account was previously onboarded."
 
-    $global:IsUserInAuditGroup = $null
+    $script:IsUserInAuditGroup = $null
     $SearchUserURL = $URL_Users + "?filter==UserName&search=$s_BuiltInAdminUsername"
 
     #Find our user
@@ -1078,7 +1119,7 @@ Function Insert-AuditorsGroup()
     }
     Catch
     {
-        Write-LogMessage -type Error -MSG $_.exception
+        Throw $_.exception
     }
     if ($GetUsersResponse.Total -eq 0)
     {
@@ -1201,7 +1242,14 @@ Function VerifyComponentExists
     Write-LogMessage -type Info -MSG "Checking if: `"$ComponentName`" exists." 
     Try
     {
-        $global:VerifyComponentExists = Invoke-RestMethod -Uri $Uri -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
+        if($debug)
+        {
+            Write-LogMessage -type Info "Invoke-RestMethod -Uri $Uri -Method Get"
+            return $true
+        }
+        else {
+            return Invoke-RestMethod -Uri $Uri -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
+        }
     }
     Catch
     {
@@ -1663,12 +1711,12 @@ Function ConvertTo-URL($sText)
 
 # ------------------------------------------------------------
 # Script Begins Here
-If ($(Test-AdminUser) -eq $False)
-{
-    Write-LogMessage -Type Error -Msg "You must be logged on as a local administrator in order to run this script."
-    Pause
-    Exit
-}
+# If ($(Test-AdminUser) -eq $False)
+# {
+#     Write-LogMessage -Type Error -Msg "You must be logged on as a local administrator in order to run this script."
+#     Pause
+#     Exit
+# }
 
 
 #Check all relevant files exist in the same folder as the script.
@@ -1738,7 +1786,7 @@ try
     If (($null -ne $detectedComponent) -and ($detectedComponent.Name.Count -gt 0))
     {
         # Set PVWA URL
-        $detectedComponent.InitPVWAURL
+        $detectedComponent.InitPVWAURL()
 
         # Set BuiltInAdmin Username, (in the future, maybe we'll want to onboard multiple accounts)
         $script:s_BuiltInAdminUsername = ([System.Uri]$URL_PVWA).host.split(".")[0] + "_admin"
@@ -1762,8 +1810,8 @@ try
         # Import CC and Bind it to Platform
         Foreach ($psmcomp in @($PSMCCID, $PSMCCDiscID))
         {
-            VerifyComponentExists -Uri ($URL_ConnectionComponentVerify -f $psmcomp) -ComponentName $psmcomp
-            if ($VerifyComponentExists.ConnectionComponentID -eq $psmcomp)
+            $connectionCompExists = VerifyComponentExists -Uri ($URL_ConnectionComponentVerify -f $psmcomp) -ComponentName $psmcomp
+            if ($connectionCompExists.ConnectionComponentID -eq $psmcomp)
             {
                 Write-LogMessage -type Success -MSG "Verified `"$psmcomp`" exists."
             }
@@ -1782,8 +1830,8 @@ try
             }
         }
         # Import CyberArk platform if it doesn't exist
-        VerifyComponentExists -Uri ($URL_PlatformVerify -f $PlatformID) -ComponentName $PlatformID
-        if ($VerifyComponentExists.platformID -eq $platformID)
+        $platformExists = VerifyComponentExists -Uri ($URL_PlatformVerify -f $PlatformID) -ComponentName $PlatformID
+        if ($platformExists.platformID -eq $platformID)
         {
             Write-LogMessage -type Success -MSG "Verified `"$PlatformID`" exists."
         }
