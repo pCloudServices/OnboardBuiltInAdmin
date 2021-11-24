@@ -1425,7 +1425,8 @@ Function Get-CPMName
     Try
     {
         $GetSystemHealthResponse = Invoke-RestMethod -Uri ($URL_SystemHealthComponent -f "CPM") -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
-        $global:FirstCPM = ($GetSystemHealthResponse.ComponentsDetails | Where-Object { $_.IsLoggedOn -eq 'True' }).ComponentUserName
+        [array]$AvailableCPMs = ($GetSystemHealthResponse.ComponentsDetails | where {$_.IsLoggedOn -eq 'True'}).ComponentUserName
+        $global:FirstCPM = $AvailableCPMs[0]
     }
     Catch
     {
@@ -1558,7 +1559,7 @@ Function Create-Account
         Write-Host ""
         Write-Host ""
         #This will happen because platform is set to verifyonadd = yes
-        Write-LogMessage -type Info -MSG "Sending account for password **verification**, please wait at least 2 mins and then check the account in the portal if it was successfully verified."
+        Write-LogMessage -type Info -MSG "Sending account for password **verification**, pleast wait at least 2 mins and then check the account in the portal if it was successfully verified." -Header
     }
     $creds = $null
     $AccBody = $null
@@ -1592,21 +1593,21 @@ Function Update-ZipWithNewChrome
     
         # Find all XML files in the ConnectionComponent ZIP
         $fileEntries = Get-ChildItem -Path $tempFolder -Filter '*.xml'
-    
-        #Read XML file
-        [xml]$xmlContent = Get-Content $fileEntries[0].FullName
-        #Add custom Chrome Path
-        $xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.InnerXml += "<Parameter Name='BrowserPath' Value='$BrowserPath'/>"
-        $xmlContent.Save($fileEntries[0].FullName)
 
-        #Zip the file back again.
-        $UpdateZip = [System.IO.Compression.ZipFile]::Open($file_path, [System.IO.Compression.ZipArchiveMode]::Update)
-        #If the file already contains the customer entry, delete it since we are importing it again.
-        Try
-        {
-            foreach ($entry in ($UpdateZip.Entries | Where-Object { $_.Name -eq $fileEntries[0].Name }))
-            {
-                $UpdateZip.Entries[3].Delete()
+    #Read XML file
+    [xml]$xmlContent = Get-Content $fileEntries[0].FullName
+    #Add custom Chrome Path
+    if($xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.Parameter.name -notcontains "BrowserPath"){
+    $xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.InnerXml += "<Parameter Name='BrowserPath' Value='$BrowserPath'/>"
+    }
+    $xmlContent.Save($fileEntries[0].FullName)
+
+    #Zip the file back again.
+    $UpdateZip = [System.IO.Compression.ZipFile]::Open($file_path,[System.IO.Compression.ZipArchiveMode]::Update)
+    #If the file already contains the customer entry, delete it since we are importing it again.
+    Try{
+        foreach ($entry in ($UpdateZip.Entries | where {$_.Name -eq $fileEntries[0].Name})){
+            $UpdateZip.Entries[3].Delete()
             }
         }
         Catch {}
@@ -1814,6 +1815,23 @@ try
             if ($connectionCompExists.ConnectionComponentID -eq $psmcomp)
             {
                 Write-LogMessage -type Success -MSG "Verified `"$psmcomp`" exists."
+                }
+                Else{
+                    $File_Path = "$PSScriptRoot\$psmcomp.zip"
+                    #Check if Chrome exists and path32/64 and adjust it in the file.
+                    $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | select -ExpandProperty `(default`)
+                    if(($DefaultChromePath -ne $actualChromePath) -and ($actualChromePath -ne $null)){
+                        Update-ZipWithnewChrome -file_path $File_Path -BrowserPath $actualChromePath
+                    }
+                    Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
+                    $Input_File = $(Read-File -File_Path $File_Path)
+                    Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
+                }
+        }
+        #Import CyberArk platform if it doesn't exist
+        VerifyComponentExists -Uri ($URL_PlatformVerify -f $PlatformID) -ComponentName $PlatformID
+            if($VerifyComponentExists.platformID -eq $platformID){
+                Write-LogMessage -type Success -MSG "Verified `"$PlatformID`" exists."
             }
             Else
             {
@@ -1826,7 +1844,12 @@ try
                 }
                 Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
                 $Input_File = $(Read-File -File_Path $File_Path)
-                Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
+                Import -Input_File $Input_File -URL_Import $URL_PlatformImport -ComponentName $PlatformID
+                Get-PSMName
+                #In case customer didn't install PSM yet there is no need to bind to platform.
+                if($FirstPSM -ne $null){
+                UpdatePlatformPSM -FirstPSM $FirstPSM
+                }
             }
         }
         # Import CyberArk platform if it doesn't exist
@@ -1848,17 +1871,16 @@ try
         Write-LogMessage -type Info -MSG "START Onboarding Flow" -SubHeader
         VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername
         #Check if in need to remove yourself from Auditors group.
-        Extract-AuditorsGroup -adminusername $s_BuiltInAdminUsername
-        Write-LogMessage -type Info -MSG "FINISH Auditor Flow" -SubHeader
-        if ($VerifyAccount.value.userName -ne $s_BuiltInAdminUsername)
-        {
-            Write-LogMessage -type Info -MSG "Not Found Account `"$s_BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
-            #Get Healthy CPM
-            Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
-            Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
-            Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f "TestBuiltint01") -FirstCPM $FirstCPM
-            Create-Account -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f "TestBuiltint01") -subdomain $subdomain
-            Write-LogMessage -type Info -MSG "FINISH Onboarding Flow" -SubHeader
+        Extract-AuditorsGroup -adminusername $BuiltInAdminUsername
+        Write-LogMessage -type Info -MSG "======================= FINISH Auditor Flow ======================="
+        if($VerifyAccount.value.userName -ne $BuiltInAdminUsername){
+        Write-LogMessage -type Info -MSG "Not Found Account `"$BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
+        #Get Healthy CPM
+        Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
+        Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
+        Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
+        Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
+        Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
         }
         #Logoff
         Invoke-Logoff
