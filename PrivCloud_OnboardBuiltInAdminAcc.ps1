@@ -856,10 +856,10 @@ Function Set-PVWAURL
     $script:URL_UserExtendedDetails = $URL_Users + "/{0}"
     $script:URL_PlatformVerify = $URL_PVWAAPI + "/Platforms/{0}"
     $script:URL_PlatformImport = $URL_PVWAAPI + "/Platforms/Import"
-    $script:URL_PlatformsFindAll = $URL_PVWAAPI+"/platforms/targets"
+    $script:URL_PlatformsFindAll = $URL_PVWAAPI + "/platforms/targets"
     $script:URL_ConnectionComponentVerify = $URL_PVWAAPI + "/ConnectionComponents/{0}"
     $script:URL_ConnectionComponentImport = $URL_PVWAAPI + "/ConnectionComponents/Import"
-    $script:URL_PlatformUpdatePSM = $URL_PVWAAPI+"/Platforms/Targets/{0}/PrivilegedSessionManagement"
+    $script:URL_PlatformUpdatePSM = $URL_PVWAAPI + "/Platforms/Targets/{0}/PrivilegedSessionManagement"
     $script:URL_GetAllPSMs = $URL_PVWAAPI + "/PSM/Servers"
     $script:URL_SystemHealthComponent = $URL_PVWAAPI + "/ComponentsMonitoringDetails/{0}"
     $script:URL_DomainDirectories = $URL_PVWAAPI + "/Configuration/LDAP/Directories"
@@ -1426,19 +1426,19 @@ Function Get-LDAPVaultAdmins
 Function Get-CPMName
 {
     Param($Uri)
-    
+    $_FirstCPM = $null
     Write-LogMessage -type Info -MSG "Getting valid CPM so we can bind it to a new Safe."
     Try
     {
         $GetSystemHealthResponse = Invoke-RestMethod -Uri ($URL_SystemHealthComponent -f "CPM") -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
         [array]$AvailableCPMs = ($GetSystemHealthResponse.ComponentsDetails | Where-Object { $_.IsLoggedOn -eq 'True' }).ComponentUserName
-        $global:FirstCPM = $AvailableCPMs[0]
+        $_FirstCPM = $AvailableCPMs[0]
     }
     Catch
     {
         Write-LogMessage -type Error -MSG ("Cannot get '$GetSystemHealthResponse' status. Error: $($_.Exception.Response.StatusDescription)", $_.Exception)
     }
-    if ($FirstCPM.count -eq 0)
+    if ($_FirstCPM.count -eq 0)
     {
         Write-LogMessage -type Error -MSG "Couldn't find a healthy CPM to use for Safe creation, check CPM service is running and appears online in SystemHealth and rerun the script."
         Pause
@@ -1446,8 +1446,10 @@ Function Get-CPMName
     }
     Else
     {
-        Write-LogMessage -type Success -MSG "Found valid CPM $FirstCPM"
+        Write-LogMessage -type Success -MSG "Found valid CPM $_FirstCPM"
     }
+
+    return $_FirstCPM
 }
 
 # @FUNCTION@ ======================================================================================================================
@@ -1460,66 +1462,74 @@ Function Get-SafeNCreate
 {
     Param($SafeName, $FirstCPM)
 
-    $SafeProperties = @{
-        "SafeName"                 = "$SafeName";
-        "Description"              = "CyberArk BuiltIn Admin safe.";
-        "ManagingCPM"              = $FirstCPM;
-        "numberOfVersionRetention" = "2";
-        #"numberOfDaysRetention" = "1";
-    }
-
-    #Check if Safe exists first
-    Write-LogMessage -type Info -MSG "Checking if Safe: `"$SafeName`" exists."
-    Try
+    # Check that CPM is not empty
+    if ($null -ne $FirstCPM)
     {
-        $global:VerifySafeExists = Invoke-RestMethod -Uri ($URL_SafeFind -f $SafeName) -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
-        if ($VerifySafeExists.SearchSafesResult.Count -gt 0)
-        {
-            #Safe found, let's check permissions
-            Write-LogMessage -type Info -MSG "Safe already exists, skipping."
-
+        $SafeProperties = @{
+            "SafeName"                 = "$SafeName";
+            "Description"              = "CyberArk BuiltIn Admin safe.";
+            "ManagingCPM"              = $FirstCPM;
+            "numberOfVersionRetention" = "2";
+            #"numberOfDaysRetention" = "1";
         }
-        Else
+    
+        #Check if Safe exists first
+        Write-LogMessage -type Info -MSG "Checking if Safe: `"$SafeName`" exists."
+        Try
         {
-            #Create Safe
-            Write-LogMessage -type Info -MSG "Safe doesn't exist, will create it."
-            $CreateNewSafe = Invoke-RestMethod -Uri $URL_Safes -Headers $s_pvwaLogonHeader -Method Post -TimeoutSec 2700 -Body $SafeProperties
-            #Grant Safe permissions, need to account for multiple LDAP domains to find all LDAP Vault group admins.
-            Write-LogMessage -type Info -MSG "Granting safe permissions."
-            foreach ($ldap in $LDAPVaultAdmins)
+            $global:VerifySafeExists = Invoke-RestMethod -Uri ($URL_SafeFind -f $SafeName) -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
+            if ($VerifySafeExists.SearchSafesResult.Count -gt 0)
             {
-                $SafePermissions = @{
-                    "MemberName"  = $($ldap.DomainGroups)#.replace("{}","")
-                    "Permissions" = @{
-                        "UseAccounts"                            = "true";
-                        "RetrieveAccounts"                       = "true";
-                        "ListAccounts"                           = "true" ;
-                        "AddAccounts"                            = "true" ;
-                        "UpdateAccountContent"                   = "true" ;
-                        "UpdateAccountProperties"                = "true" ;
-                        "InitiateCPMAccountManagementOperations" = "true" ;
-                        "SpecifyNextAccountContent"              = "true" ;
-                        "RenameAccounts"                         = "true" ;
-                        "DeleteAccounts"                         = "true" ;
-                        "UnlockAccounts"                         = "true" ;
-                        "ManageSafe"                             = "true" ;
-                        "ManageSafeMembers"                      = "true" ;
-                        "ViewAuditLog"                           = "true" ;
-                        "ViewSafeMembers"                        = "true" ;
-                        "AccessWithoutConfirmation"              = "true" ;
-                        "RequestsAuthorizationLevel1"            = "true" ;
-                        "MoveAccountsAndFolders"                 = "true" ;
-                    }
-                }
-                $CreateSafeAddMember = Invoke-RestMethod -Uri ($URL_SafeAddMembers -f $SafeName) -Headers $s_pvwaLogonHeader -Method Post -TimeoutSec 2700 -Body ($SafePermissions | ConvertTo-Json -Depth 5) -ContentType "application/json"
+                #Safe found, let's check permissions
+                Write-LogMessage -type Info -MSG "Safe already exists, skipping."
+    
             }
-            
+            Else
+            {
+                #Create Safe
+                Write-LogMessage -type Info -MSG "Safe doesn't exist, will create it."
+                $CreateNewSafe = Invoke-RestMethod -Uri $URL_Safes -Headers $s_pvwaLogonHeader -Method Post -TimeoutSec 2700 -Body $SafeProperties
+                #Grant Safe permissions, need to account for multiple LDAP domains to find all LDAP Vault group admins.
+                Write-LogMessage -type Info -MSG "Granting safe permissions."
+                foreach ($ldap in $LDAPVaultAdmins)
+                {
+                    $SafePermissions = @{
+                        "MemberName"  = $($ldap.DomainGroups)#.replace("{}","")
+                        "Permissions" = @{
+                            "UseAccounts"                            = "true";
+                            "RetrieveAccounts"                       = "true";
+                            "ListAccounts"                           = "true" ;
+                            "AddAccounts"                            = "true" ;
+                            "UpdateAccountContent"                   = "true" ;
+                            "UpdateAccountProperties"                = "true" ;
+                            "InitiateCPMAccountManagementOperations" = "true" ;
+                            "SpecifyNextAccountContent"              = "true" ;
+                            "RenameAccounts"                         = "true" ;
+                            "DeleteAccounts"                         = "true" ;
+                            "UnlockAccounts"                         = "true" ;
+                            "ManageSafe"                             = "true" ;
+                            "ManageSafeMembers"                      = "true" ;
+                            "ViewAuditLog"                           = "true" ;
+                            "ViewSafeMembers"                        = "true" ;
+                            "AccessWithoutConfirmation"              = "true" ;
+                            "RequestsAuthorizationLevel1"            = "true" ;
+                            "MoveAccountsAndFolders"                 = "true" ;
+                        }
+                    }
+                    $CreateSafeAddMember = Invoke-RestMethod -Uri ($URL_SafeAddMembers -f $SafeName) -Headers $s_pvwaLogonHeader -Method Post -TimeoutSec 2700 -Body ($SafePermissions | ConvertTo-Json -Depth 5) -ContentType "application/json"
+                }
+                
+            }
+        }
+        Catch
+        {
+            Write-LogMessage -type Error -MSG "$($Error[0])"
+            Write-LogMessage -type Error -MSG $_.exception
         }
     }
-    Catch
+    else
     {
-        Write-LogMessage -type Error -MSG "$($Error[0])"
-        Write-LogMessage -type Error -MSG $_.exception
+        Write-LogMessage -type Error -msg "No CPM was found"
     }
 }
 
@@ -1663,7 +1673,10 @@ Function UpdatePlatformPSM
 {
     param($FirstPSM)
     
-    $Body = @"
+    # Check that the PSM is not null
+    if ($null -ne $FirstPSM)
+    {
+        $Body = @"
 {
     "PSMServerId" : "$FirstPSM",
     "PSMServerName" : "$FirstPSM",
@@ -1676,47 +1689,29 @@ Function UpdatePlatformPSM
                 "PSMConnectorId" : "$PSMCCDiscID",
                 "Enabled" : "true"
             }
-      ]        
+        ]        
     }
 "@
-    
-    Try
-    {
-        $allplatformsresponse = Invoke-RestMethod -Method Get -Uri $URL_PlatformsFindAll -Headers $s_pvwaLogonHeader
-        $PlatformNumId = $allplatformsresponse.Platforms | Where-Object { $_.platformid -eq $PlatformID } | Select-Object -ExpandProperty ID
-        
-        Write-LogMessage -type Info -MSG "Updating Platform with valid PSM instance."
-        
-        $response = Invoke-RestMethod -Uri ($URL_PlatformUpdatePSM -f $PlatformNumId) -Headers $s_pvwaLogonHeader -Method Put -ContentType "application/json" -Body $Body -TimeoutSec 2700
-    }
-    Catch
-    {
-        Write-LogMessage -type Error -MSG $_.Exception
-    }
-}
-
-Function ConvertTo-URL($sText)
-{
-    <# 
-.SYNOPSIS 
-	HTTP Encode test in URL
-.DESCRIPTION
-	HTTP Encode test in URL
-.PARAMETER sText
-	The text to encode
-#>
-    if (![string]::IsNullOrEmpty($sText))
-    {
-        Write-Debug "Returning URL Encode of $sText"
-        return [URI]::EscapeDataString($sText)
+            
+        Try
+        {
+            $allplatformsresponse = Invoke-RestMethod -Method Get -Uri $URL_PlatformsFindAll -Headers $s_pvwaLogonHeader
+            $PlatformNumId = $allplatformsresponse.Platforms | Where-Object { $_.platformid -eq $PlatformID } | Select-Object -ExpandProperty ID
+                
+            Write-LogMessage -type Info -MSG "Updating Platform with valid PSM instance."
+                
+            $response = Invoke-RestMethod -Uri ($URL_PlatformUpdatePSM -f $PlatformNumId) -Headers $s_pvwaLogonHeader -Method Put -ContentType "application/json" -Body $Body -TimeoutSec 2700
+        }
+        Catch
+        {
+            Write-LogMessage -type Error -MSG $_.Exception
+        }
     }
     else
     {
-        return $sText
+        Write-LogMessage -type Error -MSG "PSM is null"    
     }
 }
-
-
 
 # ------------------------------------------------------------
 # Script Begins Here
@@ -1863,10 +1858,9 @@ try
         if ($(VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername) -eq $False)
         {
             Write-LogMessage -type Info -MSG "Not Found Account `"$s_BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
-            #Get Healthy CPM
-            Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
+            
             Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
-            Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
+            Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $(Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM"))
             Create-Account -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
             Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
         }
