@@ -29,7 +29,7 @@ $global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\ch
 
 # Script Version
 $ScriptVersion = "1.0"
-$debug = $true
+$debug = $false
 
 #region Log functions
 # @FUNCTION@ ======================================================================================================================
@@ -856,8 +856,10 @@ Function Set-PVWAURL
     $script:URL_UserExtendedDetails = $URL_Users + "/{0}"
     $script:URL_PlatformVerify = $URL_PVWAAPI + "/Platforms/{0}"
     $script:URL_PlatformImport = $URL_PVWAAPI + "/Platforms/Import"
+    $script:URL_PlatformsFindAll = $URL_PVWAAPI+"/platforms/targets"
     $script:URL_ConnectionComponentVerify = $URL_PVWAAPI + "/ConnectionComponents/{0}"
     $script:URL_ConnectionComponentImport = $URL_PVWAAPI + "/ConnectionComponents/Import"
+    $script:URL_PlatformUpdatePSM = $URL_PVWAAPI+"/Platforms/Targets/{0}/PrivilegedSessionManagement"
     $script:URL_GetAllPSMs = $URL_PVWAAPI + "/PSM/Servers"
     $script:URL_SystemHealthComponent = $URL_PVWAAPI + "/ComponentsMonitoringDetails/{0}"
     $script:URL_DomainDirectories = $URL_PVWAAPI + "/Configuration/LDAP/Directories"
@@ -1218,8 +1220,7 @@ Function Extract-AuditorsGroup()
         Write-LogMessage -MSG "Removing user from Auditors group as it wasn't there on the initial run."
         Try
         {
-            $body = @{MemberId = "" + $s_BuiltInAdminUsername + "" } | ConvertTo-Json -Compress
-            $SetGroupResponse = Invoke-RestMethod -Method Delete -Uri ($URL_UserDelGroup -f $GetUserGroupsId, $adminusername) -Headers $s_pvwaLogonHeader -Body $body -ContentType "application/json" -TimeoutSec 2700
+            $SetGroupResponse = Invoke-RestMethod -Method Delete -Uri ($URL_UserDelGroup -f $GetUserGroupsId, $adminusername) -Headers $s_pvwaLogonHeader -TimeoutSec 2700
         }
         Catch
         {
@@ -1359,8 +1360,9 @@ Function VerifyAccount
         {
             $errors += "The account has `"Allow automatic password management`" disabled which prevents CPM from changing/verifying the account, please check account status and enable password management."
         }
-        if ($null -ne $errors)
+        if ($errors -ne $null)
         {
+            Write-Host $errors
             Write-LogMessage -type Error -MSG "Detected issues with the account, please fix below:"
             foreach ($err in $errors)
             {
@@ -1638,13 +1640,12 @@ Function Update-ZipWithNewChrome
 # =================================================================================================================================
 Function Get-PSMName
 {
-    
-    Write-LogMessage -type Info -MSG "Getting valid PSM so we can bind it to platform."
+    #Write-LogMessage -type Info -MSG "Getting valid PSM so we can bind it to platform."
     Try
     {
         $response = Invoke-RestMethod -Uri $URL_GetAllPSMs -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
         
-        return ($response.PSMServers.ID[0])
+        return $response.PSMServers.ID[0]
     }
     Catch
     {
@@ -1861,16 +1862,16 @@ try
         
         if ($(VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername) -eq $False)
         {
-            Write-LogMessage -type Info -MSG "Not Found Account `"$BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
+            Write-LogMessage -type Info -MSG "Not Found Account `"$s_BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
             #Get Healthy CPM
             Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
             Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
             Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
-            Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
+            Create-Account -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
             Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
         }
         #Check if in need to remove yourself from Auditors group.
-        Extract-AuditorsGroup -adminusername $BuiltInAdminUsername
+        Extract-AuditorsGroup -adminusername $s_BuiltInAdminUsername
         Write-LogMessage -type Info -MSG "======================= FINISH Auditor Flow ======================="
         
         #Logoff
