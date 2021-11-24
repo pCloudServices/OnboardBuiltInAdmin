@@ -1306,7 +1306,8 @@ Function Get-CPMName{
     Write-LogMessage -type Info -MSG "Getting valid CPM so we can bind it to a new Safe."
     Try{
         $GetSystemHealthResponse = Invoke-RestMethod -Uri ($URL_SystemHealthComponent -f "CPM") -Headers $pvwaLogonHeader -Method Get -TimeoutSec 2700
-        $global:FirstCPM = ($GetSystemHealthResponse.ComponentsDetails | where {$_.IsLoggedOn -eq 'True'}).ComponentUserName
+        [array]$AvailableCPMs = ($GetSystemHealthResponse.ComponentsDetails | where {$_.IsLoggedOn -eq 'True'}).ComponentUserName
+        $global:FirstCPM = $AvailableCPMs[0]
     }
     Catch{
     Write-LogMessage -type Error -MSG ("Cannot get '$GetSystemHealthResponse' status. Error: $($_.Exception.Response.StatusDescription)",$_.Exception)
@@ -1639,6 +1640,7 @@ try{
         if($null -ne $detectedComponents){
         #We only need to find one of the installed components to pull the PVWA string from.
         $return
+        break
         }
     }
     If(($null -ne $detectedComponents) -and ($detectedComponents.Name.Count -gt 0))
@@ -1672,7 +1674,7 @@ try{
                     $File_Path = "$PSScriptRoot\$psmcomp.zip"
                     #Check if Chrome exists and path32/64 and adjust it in the file.
                     $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | select -ExpandProperty `(default`)
-                    if($DefaultChromePath -ne $actualChromePath){
+                    if(($DefaultChromePath -ne $actualChromePath) -and ($actualChromePath -ne $null)){
                         Update-ZipWithnewChrome -file_path $File_Path -BrowserPath $actualChromePath
                     }
                     Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
@@ -1691,7 +1693,10 @@ try{
                 $Input_File = $(Read-File -File_Path $File_Path)
                 Import -Input_File $Input_File -URL_Import $URL_PlatformImport -ComponentName $PlatformID
                 Get-PSMName
+                #In case customer didn't install PSM yet there is no need to bind to platform.
+                if($FirstPSM -ne $null){
                 UpdatePlatformPSM -FirstPSM $FirstPSM
+                }
             }
         Write-LogMessage -type Info -MSG "======================= FINISH Import Plugins Flow ======================="
         #Onboard Account
