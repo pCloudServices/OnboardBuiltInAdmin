@@ -970,8 +970,8 @@ function Get-Choice {
         Write-Warning "DefaultChoice needs to be a value between 1 and $($Options.Count) or -1 (for none)"
         exit
     }
-    Add-Type –AssemblyName System.Windows.Forms
-    Add-Type –AssemblyName System.Drawing
+    Add-Type â€“AssemblyName System.Windows.Forms
+    Add-Type â€“AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $script:result = ""
     $form = New-Object System.Windows.Forms.Form
@@ -992,13 +992,13 @@ function Get-Choice {
     $buttonWidth = [Math]::Max($minButtonWidth, $buttonWidth)
     $formWidth =  [Windows.Forms.TextRenderer]::MeasureText($Title,$form.Font).Width
     $spaceWidth = ($options.Count+1) * $spacing
-    $formWidth = ($formWidth, $minFormWidth, ($buttonWidth * $Options.Count + $spaceWidth) | Measure-Object –Maximum).Maximum
+    $formWidth = ($formWidth, $minFormWidth, ($buttonWidth * $Options.Count + $spaceWidth) | Measure-Object -Maximum).Maximum
     $form.ClientSize = New-Object System.Drawing.Size($formWidth,$formHeight)
     $index = 0
     #create the buttons dynamically based on the options
     foreach ($option in $Options){
-        Set-Variable "button$index" –Value (New-Object System.Windows.Forms.Button)
-        $temp = Get-Variable "button$index" –ValueOnly
+        Set-Variable "button$index" -Value (New-Object System.Windows.Forms.Button)
+        $temp = Get-Variable "button$index" -ValueOnly
         $temp.Size = New-Object System.Drawing.Size($buttonWidth,$buttonHeight)
         $temp.UseVisualStyleBackColor = $True
         $temp.Text = $option
