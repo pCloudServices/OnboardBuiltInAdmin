@@ -659,9 +659,9 @@ Function Invoke-Logon
         IgnoreCertErrors
         # Login to PVWA
         Write-LogMessage -type Info -MSG "START Logging in to PVWA."
-        if($debug)
+        if ($debug)
         {
-            $script:s_pvwaLogonHeader = @{ Authorization="MyToken" }
+            $script:s_pvwaLogonHeader = @{ Authorization = "MyToken" }
         }
         else 
         {    
@@ -767,7 +767,7 @@ Function Set-PVWAURL
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [ValidateSet("CPM", "PSM","Debug")]
+        [ValidateSet("CPM", "PSM", "Debug")]
         [string]$ComponentID,
         [Parameter(Mandatory = $False)]
         [string]$ConfigPath,
@@ -814,7 +814,7 @@ Function Set-PVWAURL
                     $foundConfig = $true
                 }
             }
-            if($ComponentID -eq "Debug")
+            if ($ComponentID -eq "Debug")
             {
                 $PVWAurl = "https://myPVWA.mydomain.com/PasswordVault"
             }
@@ -955,24 +955,24 @@ Function Find-Components
                 }
                 "Debug"
                 {
-                    if($debug)
+                    if ($debug)
                     {
                         try
                         {
                             # Check if PSM is installed
                             Write-LogMessage -Type "Debug" -MSG "Searching for Debug..."
     
-                                Write-LogMessage -Type "Info" -MSG "Found Debug installation."
-                                $PSMPath = "C:\Temp"
-                                $ConfigPath = (Join-Path -Path $PSMPath -ChildPath "temp\PVConfiguration.xml")
-                                $myObject = New-Object PSObject -Property @{
-                                    Name        = "Debug"; 
-                                    DisplayName = "Debug";
-                                    Path        = $PSMPath;
-                                    ConfigPath  = $ConfigPath;
-                                }
-                                $myObject | Add-Member -MemberType ScriptMethod -Name InitPVWAURL -Value { Set-PVWAURL -ComponentID $this.Name -ConfigPath $this.ConfigPath -AuthType "cyberark" } | Out-Null
-                                return $myObject
+                            Write-LogMessage -Type "Info" -MSG "Found Debug installation."
+                            $PSMPath = "C:\Temp"
+                            $ConfigPath = (Join-Path -Path $PSMPath -ChildPath "temp\PVConfiguration.xml")
+                            $myObject = New-Object PSObject -Property @{
+                                Name        = "Debug"; 
+                                DisplayName = "Debug";
+                                Path        = $PSMPath;
+                                ConfigPath  = $ConfigPath;
+                            }
+                            $myObject | Add-Member -MemberType ScriptMethod -Name InitPVWAURL -Value { Set-PVWAURL -ComponentID $this.Name -ConfigPath $this.ConfigPath -AuthType "cyberark" } | Out-Null
+                            return $myObject
                             
                         }
                         catch
@@ -986,7 +986,7 @@ Function Find-Components
                 {
                     try
                     {
-                        ForEach ($comp in @("CPM", "PSM","Debug"))
+                        ForEach ($comp in @("CPM", "PSM", "Debug"))
                         {
                             $retArrComponents += Find-Components -Component $comp -FindOne:$FindOne
                             if ($FindOne -and $retArrComponents.Count -gt 0)
@@ -1242,12 +1242,13 @@ Function VerifyComponentExists
     Write-LogMessage -type Info -MSG "Checking if: `"$ComponentName`" exists." 
     Try
     {
-        if($debug)
+        if ($debug)
         {
             Write-LogMessage -type Info "Invoke-RestMethod -Uri $Uri -Method Get"
             return $true
         }
-        else {
+        else
+        {
             return Invoke-RestMethod -Uri $Uri -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
         }
     }
@@ -1322,29 +1323,30 @@ Function VerifyAccount
     Write-LogMessage -type Info -MSG "Checking if: `"$AdminUsername`" exists." 
     Try
     {
-        $global:VerifyAccount = Invoke-RestMethod -Uri ($Uri + $SearchFilter) -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
+        $_VerifyAccount = Invoke-RestMethod -Uri ($Uri + $SearchFilter) -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
     }
     Catch
     {
         Write-LogMessage -type Error -MSG "$($Error[0])"
         Write-LogMessage -type Error -MSG $_.exception
     }
-
-    if ($VerifyAccount.value.userName -eq $AdminUsername)
+    $retAccountExists = $false
+    if ($_VerifyAccount.value.userName -eq $AdminUsername)
     {
         Write-LogMessage -type Info -MSG "Account already exists! will check if it's in healthy status"
+        $retAccountExists = $true
         #Get dates to compare how old is the account.
-        $AcctUnixTimeLastModified = $((([System.DateTimeOffset]::FromUnixTimeSeconds($VerifyAccount.value.SecretManagement.lastModifiedTime)).DateTime).toString("d"))
-        $AcctUnixTimeCreatedTime = $((([System.DateTimeOffset]::FromUnixTimeSeconds($VerifyAccount.value.createdTime)).DateTime).toString("d"))
+        $AcctUnixTimeLastModified = $((([System.DateTimeOffset]::FromUnixTimeSeconds($_VerifyAccount.value.SecretManagement.lastModifiedTime)).DateTime).toString("d"))
+        $AcctUnixTimeCreatedTime = $((([System.DateTimeOffset]::FromUnixTimeSeconds($_VerifyAccount.value.createdTime)).DateTime).toString("d"))
         $CurrentUnixTime = (Get-Date)
-        if ($VerifyAccount.value.SecretManagement.automaticManagementEnabled -eq "true")
+        if ($_VerifyAccount.value.SecretManagement.automaticManagementEnabled -eq "true")
         {
             Write-LogMessage -type Success -MSG "The account has `"Allow automatic password management`" enabled!"
-            if ($VerifyAccount.value.SecretManagement.status -eq "success")
+            if ($_VerifyAccount.value.SecretManagement.status -eq "success")
             {
                 Write-LogMessage -type Success -MSG "Latest password change/verify attempt was a `"success`""
             }
-            Elseif (($AcctUnixTimeCreatedTime -le $CurrentUnixTime.ToString("d") -and ($null -eq $VerifyAccount.value.SecretManagement.status)))
+            Elseif (($AcctUnixTimeCreatedTime -le $CurrentUnixTime.ToString("d") -and ($null -eq $_VerifyAccount.value.SecretManagement.status)))
             {
                 $errors += "Detected account was only recently onboarded but no attempt at change/verify password was made, please check the account and attempt password change/verify and rerun the script to confirm."
             }
@@ -1372,6 +1374,8 @@ Function VerifyAccount
             Write-LogMessage -type Info -MSG "Account is onboarded and no issues found! You're all set." -Header
         }
     }
+
+    return $retAccountExists
 }
 
 # @FUNCTION@ ======================================================================================================================
@@ -1425,7 +1429,7 @@ Function Get-CPMName
     Try
     {
         $GetSystemHealthResponse = Invoke-RestMethod -Uri ($URL_SystemHealthComponent -f "CPM") -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
-        [array]$AvailableCPMs = ($GetSystemHealthResponse.ComponentsDetails | where {$_.IsLoggedOn -eq 'True'}).ComponentUserName
+        [array]$AvailableCPMs = ($GetSystemHealthResponse.ComponentsDetails | Where-Object { $_.IsLoggedOn -eq 'True' }).ComponentUserName
         $global:FirstCPM = $AvailableCPMs[0]
     }
     Catch
@@ -1594,20 +1598,23 @@ Function Update-ZipWithNewChrome
         # Find all XML files in the ConnectionComponent ZIP
         $fileEntries = Get-ChildItem -Path $tempFolder -Filter '*.xml'
 
-    #Read XML file
-    [xml]$xmlContent = Get-Content $fileEntries[0].FullName
-    #Add custom Chrome Path
-    if($xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.Parameter.name -notcontains "BrowserPath"){
-    $xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.InnerXml += "<Parameter Name='BrowserPath' Value='$BrowserPath'/>"
-    }
-    $xmlContent.Save($fileEntries[0].FullName)
+        #Read XML file
+        [xml]$xmlContent = Get-Content $fileEntries[0].FullName
+        #Add custom Chrome Path
+        if ($xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.Parameter.name -NotContains "BrowserPath")
+        {
+            $xmlContent.ConnectionComponent.TargetSettings.ClientSpecific.InnerXml += "<Parameter Name='BrowserPath' Value='$BrowserPath'/>"
+        }
+        $xmlContent.Save($fileEntries[0].FullName)
 
-    #Zip the file back again.
-    $UpdateZip = [System.IO.Compression.ZipFile]::Open($file_path,[System.IO.Compression.ZipArchiveMode]::Update)
-    #If the file already contains the customer entry, delete it since we are importing it again.
-    Try{
-        foreach ($entry in ($UpdateZip.Entries | where {$_.Name -eq $fileEntries[0].Name})){
-            $UpdateZip.Entries[3].Delete()
+        #Zip the file back again.
+        $UpdateZip = [System.IO.Compression.ZipFile]::Open($file_path, [System.IO.Compression.ZipArchiveMode]::Update)
+        #If the file already contains the customer entry, delete it since we are importing it again.
+        Try
+        {
+            foreach ($entry in ($UpdateZip.Entries | Where-Object { $_.Name -eq $fileEntries[0].Name }))
+            {
+                $UpdateZip.Entries[3].Delete()
             }
         }
         Catch {}
@@ -1712,12 +1719,15 @@ Function ConvertTo-URL($sText)
 
 # ------------------------------------------------------------
 # Script Begins Here
-# If ($(Test-AdminUser) -eq $False)
-# {
-#     Write-LogMessage -Type Error -Msg "You must be logged on as a local administrator in order to run this script."
-#     Pause
-#     Exit
-# }
+if (-not $debug)
+{
+    If ($(Test-AdminUser) -eq $False)
+    {
+        Write-LogMessage -Type Error -Msg "You must be logged on as a local administrator in order to run this script."
+        Pause
+        Exit
+    }
+}
 
 
 #Check all relevant files exist in the same folder as the script.
@@ -1815,43 +1825,22 @@ try
             if ($connectionCompExists.ConnectionComponentID -eq $psmcomp)
             {
                 Write-LogMessage -type Success -MSG "Verified `"$psmcomp`" exists."
-                }
-                Else{
-                    $File_Path = "$PSScriptRoot\$psmcomp.zip"
-                    #Check if Chrome exists and path32/64 and adjust it in the file.
-                    $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | select -ExpandProperty `(default`)
-                    if(($DefaultChromePath -ne $actualChromePath) -and ($actualChromePath -ne $null)){
-                        Update-ZipWithnewChrome -file_path $File_Path -BrowserPath $actualChromePath
-                    }
-                    Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
-                    $Input_File = $(Read-File -File_Path $File_Path)
-                    Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
-                }
-        }
-        #Import CyberArk platform if it doesn't exist
-        VerifyComponentExists -Uri ($URL_PlatformVerify -f $PlatformID) -ComponentName $PlatformID
-            if($VerifyComponentExists.platformID -eq $platformID){
-                Write-LogMessage -type Success -MSG "Verified `"$PlatformID`" exists."
             }
             Else
             {
                 $File_Path = "$PSScriptRoot\$psmcomp.zip"
-                # Check if Chrome exists and path32/64 and adjust it in the file.
+                #Check if Chrome exists and path32/64 and adjust it in the file.
                 $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty `(default`)
-                if ($DefaultChromePath -ne $actualChromePath)
+                if (($DefaultChromePath -ne $actualChromePath) -and ($actualChromePath -ne $null))
                 {
                     Update-ZipWithNewChrome -file_path $File_Path -BrowserPath $actualChromePath
                 }
                 Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
                 $Input_File = $(Read-File -File_Path $File_Path)
-                Import -Input_File $Input_File -URL_Import $URL_PlatformImport -ComponentName $PlatformID
-                Get-PSMName
-                #In case customer didn't install PSM yet there is no need to bind to platform.
-                if($FirstPSM -ne $null){
-                UpdatePlatformPSM -FirstPSM $FirstPSM
-                }
+                Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
             }
         }
+        
         # Import CyberArk platform if it doesn't exist
         $platformExists = VerifyComponentExists -Uri ($URL_PlatformVerify -f $PlatformID) -ComponentName $PlatformID
         if ($platformExists.platformID -eq $platformID)
@@ -1869,19 +1858,21 @@ try
         Write-LogMessage -type Info -MSG "FINISH Import Plugins Flow" -SubHeader
         #Onboard Account
         Write-LogMessage -type Info -MSG "START Onboarding Flow" -SubHeader
-        VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername
+        
+        if ($(VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername) -eq $False)
+        {
+            Write-LogMessage -type Info -MSG "Not Found Account `"$BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
+            #Get Healthy CPM
+            Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
+            Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
+            Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
+            Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
+            Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
+        }
         #Check if in need to remove yourself from Auditors group.
         Extract-AuditorsGroup -adminusername $BuiltInAdminUsername
         Write-LogMessage -type Info -MSG "======================= FINISH Auditor Flow ======================="
-        if($VerifyAccount.value.userName -ne $BuiltInAdminUsername){
-        Write-LogMessage -type Info -MSG "Not Found Account `"$BuiltInAdminUsername`" will now attempt onboarding it to platform `"$PlatformID`""
-        #Get Healthy CPM
-        Get-CPMName -Uri ($URL_SystemHealthComponent -f "CPM")
-        Get-LDAPVaultAdmins -Uri $URL_DomainDirectories
-        Get-SafeNCreate -Uri $URL_Safes -SafeName ($SafeName -f $subdomain) -FirstCPM $FirstCPM
-        Create-Account -Uri $URL_Accounts -AdminUsername $BuiltInAdminUsername -address "vault-$subdomain.privilegecloud.cyberark.com" -safeName ($SafeName -f $subdomain) -subdomain $subdomain
-        Write-LogMessage -type Info -MSG "======================= FINISH Onboarding Flow ======================="
-        }
+        
         #Logoff
         Invoke-Logoff
     }
