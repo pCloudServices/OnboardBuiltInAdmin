@@ -1297,7 +1297,7 @@ Function Import
         
     Try
     {
-        $restResult = Invoke-RestMethod -Uri $URL_Import -Header $s_pvwaLogonHeader -Method Post -Body $restBody -ContentType "application/json"
+        $restResult = Invoke-RestMethod -Uri $URL_Import -Headers $s_pvwaLogonHeader -Method Post -Body $restBody -ContentType "application/json"
     }
     Catch
     {
@@ -1816,9 +1816,9 @@ try
         Invoke-Logon
 
         # Check if in Auditors Group and add yourself.
-        Write-LogMessage -type Info -MSG "START Auditor Flow" -SubHeader
+        Write-LogMessage -type Info -MSG "START Auditor Flow"
         Insert-AuditorsGroup
-        Write-LogMessage -type Info -MSG "START Import Plugins Flow" -SubHeader
+        Write-LogMessage -type Info -MSG "START Import Plugins Flow"
         # Import CC and Bind it to Platform
         Foreach ($psmcomp in @($PSMCCID, $PSMCCDiscID))
         {
@@ -1856,9 +1856,9 @@ try
             Import -Input_File $Input_File -URL_Import $URL_PlatformImport -ComponentName $PlatformID
             UpdatePlatformPSM -FirstPSM $(Get-PSMName)
         }
-        Write-LogMessage -type Info -MSG "FINISH Import Plugins Flow" -SubHeader
+        Write-LogMessage -type Info -MSG "FINISH Import Plugins Flow"
         #Onboard Account
-        Write-LogMessage -type Info -MSG "START Onboarding Flow" -SubHeader
+        Write-LogMessage -type Info -MSG "START Onboarding Flow"
         
         if ($(VerifyAccount -Uri $URL_Accounts -AdminUsername $s_BuiltInAdminUsername) -eq $False)
         {
