@@ -28,7 +28,7 @@ $global:SafeName = "CyberArk_{0}_ADM"
 $global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
 # Script Version
-$ScriptVersion = "1.0"
+$ScriptVersion = "1.1"
 $debug = $false
 
 #region Log functions
@@ -101,7 +101,7 @@ Function Write-LogMessage
         $msgToWrite = ""
 		
         # Mask Passwords
-        $maskingPattern = '(?:(?:["\s\/\\](password|secret|NewCredentials|credentials|answer)(?!s))\s{0,}["\:= ]{1,}\s{0,}["]{0,})(?=([\w`~!@#$%^&*()\-_\=\+\\\/\|\,\;\:\.\[\]\{\}]+))'
+        $maskingPattern = '(?:(?:["\s\/\\](secret|NewCredentials|credentials|answer)(?!s))\s{0,}["\:= ]{1,}\s{0,}["]{0,})(?=([\w`~!@#$%^&*()\-_\=\+\\\/\|\,\;\:\.\[\]\{\}]+))'
         $maskingResult = $Msg | Select-String $maskingPattern -AllMatches
         if ($maskingResult.Matches.Count -gt 0)
         {
@@ -272,7 +272,7 @@ Function Test-ScriptLatestVersion
         If ($($getScriptContent -match "$versionPattern\s{0,1}=\s{0,1}\""([\d\.]{1,10})\"""))
         {
             $gitHubScriptVersion = $Matches[1]
-            if ($null -ne $outGitHubVersion)
+            if ($outGitHubVersion -ne $null)
             {
                 $outGitHubVersion.Value = $gitHubScriptVersion
             }
@@ -728,13 +728,13 @@ Function Get-ServiceInstallPath
         $retInstallPath = $Null
         try
         {
-            if ($null -eq $m_ServiceList)
+            if ($m_ServiceList -eq $null)
             {
                 Set-Variable -Name m_ServiceList -Value $(Get-ChildItem "HKLM:\System\CurrentControlSet\Services" | ForEach-Object { Get-ItemProperty $_.pspath }) -Scope Script
                 #$m_ServiceList = Get-Reg -Hive "LocalMachine" -Key System\CurrentControlSet\Services -Value $null
             }
             $regPath = $m_ServiceList | Where-Object { $_.PSChildName -eq $ServiceName }
-            If ($Null -ne $regPath)
+            If ($regPath -ne $null)
             {
                 $retInstallPath = $regPath.ImagePath.Substring($regPath.ImagePath.IndexOf('"'), $regPath.ImagePath.LastIndexOf('"') + 1)
             }
@@ -1111,7 +1111,6 @@ Function Insert-AuditorsGroup()
 {
     Write-LogMessage -MSG "Checking if user is part of Auditors group, this is needed to find out if the account was previously onboarded."
 
-    $script:IsUserInAuditGroup = $null
     $SearchUserURL = $URL_Users + "?filter==UserName&search=$s_BuiltInAdminUsername"
 
     #Find our user
@@ -1140,6 +1139,7 @@ Function Insert-AuditorsGroup()
             if ($user.users.username[$i] -eq $s_BuiltInAdminUsername)
             {
                 $global:BuiltIndAdminUserId = $user.users.id[$i]
+                break
             }
             $i += 1
         }
@@ -1149,16 +1149,18 @@ Function Insert-AuditorsGroup()
         $BuiltIndAdminUserId = $GetUsersResponse.users.id
     }
 
-    #Get user extended details to check if in Auditor group. (Compatible with 11.7 - 12.2)
-    $global:GetUserDetailsResponse = Invoke-RestMethod -Method Get -Uri ($URL_UserExtendedDetails -f $BuiltIndAdminUserId) -Headers $s_pvwaLogonHeader -ContentType "application/json" -TimeoutSec 2700
-
+    #Get Auditor Group and search if user exists in it.
+    $SearchGroupURL = $URL_UsersGroups + "?filter=groupName eq Auditors&includeMembers=True"
+    $GetAuditorsGroupResponse = Invoke-RestMethod -Method Get -Uri ($SearchGroupURL) -Headers $s_pvwaLogonHeader -TimeoutSec 2700
     #Check if User is inside Auditors Group
-    if ($GetUserDetailsResponse.groupsMembership.groupName -contains "Auditors")
+    if ($GetAuditorsGroupResponse.value.members.username -contains $s_BuiltInAdminUsername)
     {
         Write-LogMessage -MSG "User is already part of Auditors Group, skipping..."
         #Save the Status of user in group or not and store it in a file in case the script was stopped.
         $parameters = @{IsUserInAuditGroup = "True" }
-        $parameters | Export-Clixml -Path $CONFIG_PARAMETERS_FILE -Encoding ASCII
+        if(-not(Test-Path $CONFIG_PARAMETERS_FILE)){
+        $parameters | Export-Clixml -Path $CONFIG_PARAMETERS_FILE -NoClobber -Encoding ASCII -Force
+        }
     }
     Else
     {
@@ -1169,7 +1171,11 @@ Function Insert-AuditorsGroup()
         $i = 0
         foreach ($userGroup in $GetUserGroupsResponse)
         {
-            if ($userGroup.value.groupname[$i] -eq "Auditors") { $global:GetUserGroupsId = $userGroup.value.id[$i] }
+            if($userGroup.value.groupname[$i] -eq "Auditors")
+            {
+             $global:GetUserGroupsId = $userGroup.value.id[$i]
+             break
+            }
             $i += 1
         }
         #Add User to Auditors Group.
@@ -1185,11 +1191,13 @@ Function Insert-AuditorsGroup()
             Write-LogMessage -type Error -MSG $_.ErrorDetails.Message
         }
         #if we get a some response we proceed to save the status of the user in a variable and a local file.
-        if ($null -ne $SetGroupResponse)
+        if ($SetGroupResponse -ne $null)
         {
             #Save the Status of user in group or not and store it in a file in case the script was stopped.
             $parameters = @{IsUserInAuditGroup = "False" }
-            $parameters | Export-Clixml -Path $CONFIG_PARAMETERS_FILE -Encoding ASCII
+            if(-not(Test-Path $CONFIG_PARAMETERS_FILE)){
+            $parameters | Export-Clixml -Path $CONFIG_PARAMETERS_FILE -NoClobber -Encoding ASCII -Force
+            }
         }
     }
 }
@@ -1203,21 +1211,28 @@ Function Insert-AuditorsGroup()
 Function Extract-AuditorsGroup()
 {
     param($adminusername)
-    # if $IsUserInAuditGroup is empty, it means the script was interrupted, we need to check the .ini file.
-    if ($null -eq $IsUserInAuditGroup)
-    {
-        $parameters = Import-Clixml -Path $CONFIG_PARAMETERS_FILE
-        $global:IsUserInAuditGroup = $parameters.IsUserInAuditGroup
-    }
+    $parameters = Import-Clixml -Path $CONFIG_PARAMETERS_FILE
+    $IsUserInAuditGroup = ($parameters.Values)
     # Check if use was in auditor group then do nothing, else we remove it.
     Write-LogMessage -MSG "Checking if user was in Auditors group."
-    if ($IsUserInAuditGroup -eq "True")
+    if($IsUserInAuditGroup -eq "True")
     {
         Write-LogMessage -MSG "User was already part of the Auditor group, skipping..."
     }
     Else
     {
         Write-LogMessage -MSG "Removing user from Auditors group as it wasn't there on the initial run."
+        $GetUserGroupsResponse = Invoke-RestMethod -Method Get -Uri $URL_UsersGroups -Headers $s_pvwaLogonHeader -ContentType "application/json" -TimeoutSec 2700
+        $i = 0
+        foreach ($userGroup in $GetUserGroupsResponse)
+        {
+            if($userGroup.value.groupname[$i] -eq "Auditors")
+            {
+             $global:GetUserGroupsId = $userGroup.value.id[$i]
+             break
+            }
+            $i += 1
+        }
         Try
         {
             $SetGroupResponse = Invoke-RestMethod -Method Delete -Uri ($URL_UserDelGroup -f $GetUserGroupsId, $adminusername) -Headers $s_pvwaLogonHeader -TimeoutSec 2700
@@ -1889,8 +1904,8 @@ catch
 # SIG # Begin signature block
 # MIIfdgYJKoZIhvcNAQcCoIIfZzCCH2MCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC/CbzMx1/EbLXl
-# 83zCCSMMXdtC9WE2hkea35OYl0XuWaCCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAmTu4OZGqKJ+L0
+# 4438AUN/KKXPl6ulYFRtuZIXm/8pI6CCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
 # NStkZdZqMA0GCSqGSIb3DQEBCwUAMFcxCzAJBgNVBAYTAkJFMRkwFwYDVQQKExBH
 # bG9iYWxTaWduIG52LXNhMRAwDgYDVQQLEwdSb290IENBMRswGQYDVQQDExJHbG9i
 # YWxTaWduIFJvb3QgQ0EwHhcNMTgwOTE5MDAwMDAwWhcNMjgwMTI4MTIwMDAwWjBM
@@ -1972,17 +1987,17 @@ catch
 # O0dsb2JhbFNpZ24gRXh0ZW5kZWQgVmFsaWRhdGlvbiBDb2RlU2lnbmluZyBDQSAt
 # IFNIQTI1NiAtIEczAgxUZhOjzncM/KH38lwwDQYJYIZIAWUDBAIBBQCgfDAQBgor
 # BgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEE
-# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgrQxlC5IONrfk
-# rhbfXEQnPXpXqvlxnVlLrsAUJSUHdRYwDQYJKoZIhvcNAQEBBQAEggEAhNNELkba
-# HPkakJjAJTNoQOj5RlPO/TvxY4OlT5PMNlvHZU6by3U8AFMOu+zbFIpvYcOhZACm
-# o7Un2end9Uutd56fmO8WN3igOG58FbFoc+0NOckPjlM2+UoGks7ChIVK0QKehtu+
-# jH2ffcaEZMQPBq/BVwIbue143CP8pwRX6QqDVjHM0/w9YdPIfXRVdRK6Jc3S7vjq
-# 8Y+lGRmMXLrrSVBUkkB9vWFEU6EEqBspikb+yvdRg9MGx2nRm1FnKXmmweBXADtk
-# E++lECkAscTM3TanPWngZEeT3EBtzzyexWgr1SGxbnMoySWWB0NgIATm4YsrhKeO
-# bv7QZkdTswZggKGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
+# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgqqtYR4p+MViX
+# +ElqCBbXivRNyo3n7ZNlwZxsm/Y8f/QwDQYJKoZIhvcNAQEBBQAEggEAPEEQeltA
+# k2gXlmZ22pxLDxzxVa2EVW9uils2HNHQUMhFlWPC+Gs5uaSR9Ful8XUjy89Nira5
+# 9Q33dVdlkwVXn9epfL/eYqPvvkfP9Nt0/BPP1FOLQpCvE5EfVemZJlYPIM9uPLsw
+# EPR0qCP2Yz+bISW1v/3JHjY8fkkim8L0ZulYVGixrjv7zIKRBASxwfJF52CrQjud
+# IJWTbq9pgqBak/h8JFFuurULctCmBWex4MKHOILLj+UvLR+/nZYh/NDtvPCLdIM3
+# yKVha0zJM5iznYm3/zMwKPj1/BDM/MoFOKy4vLV2yw3ZKNKXgseCquDVnmTzU2D+
+# j8tSW5GxLVbkKKGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
 # AqCCDgUwgg4BAgEDMQ0wCwYJYIZIAWUDBAIBMIH/BgsqhkiG9w0BCRABBKCB7wSB
-# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBQaaKet1Yei1Hi7gVyM
-# f2FhRDb/AQIVALwRP3A6zowFNhrAByhuJRZ7xyf9GA8yMDIxMTEyNTE0MTQ1OVow
+# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBQopLCDUeWU3S4gZMSb
+# 1RonzAjKcAIVAOV0KWdmHNHK6nMh4Qu5VkvIEVCOGA8yMDIxMTEyODE1NDI1OVow
 # AwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVjIENv
 # cnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEwLwYD
 # VQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEczoIIK
@@ -2046,13 +2061,13 @@ catch
 # BAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVz
 # dCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5n
 # IENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG9w0B
-# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTEyNTE0MTQ1OVow
-# LwYJKoZIhvcNAQkEMSIEICJD2LR3z9DtIaiGPoPP2sBsgpfiPLlZ32d5f+G3BFCU
+# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTEyODE1NDI1OVow
+# LwYJKoZIhvcNAQkEMSIEIPge1uTGrG8l7F2kTK3TdYH1Kw3fwUalrBGkVDetT+1N
 # MDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKCATz+
-# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCauc97KXvrgnXFVzGxcNDioJ1mJMLi
-# gN7C+ufxZpsDnW7aIrth5/5azN6XXSq3mH2Z87oYKGzUa3GZ30O7lyAPxYel5NQe
-# 6d0L9sdFlS0fanOvJDET3JCChEZT6Wd7S9ffanF7/vb5hfLtJ139Sz6lI88lwLy8
-# fxRf9j7w6gvfaDVQ4YDQwI0FoAGt3L6lVEUIVnmXMBIS0aUJPD+CevMJSA/Du5M7
-# 1MPiMG03rfeTd3ahaqBTa42S644hHKV6lfzYk6JkrqkZKZdaAmIDhIzQ2Paqjhw4
-# VfY7hVQtm3ptUB8MXYxHPsFz3PYsNX4crh25g8TCIBR02Q0rBrfiSol7
+# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCFok4XFwtcGAxX7dAxX0vNh5mQ81ZU
+# nzwYFLYG63RuOLmj8fU4fu5wzo+1vtIklilT3x6AlZgzxMke8uDjq4dae6O3dPZL
+# 3BaWK70FU60w/dal8heskolpXiMCM7E0l7kPTVBfPEk1/AoZgcnfMBq31CvYuqGm
+# gscuIsSQhrcZKv+9sl2Vt0sbHy3Tat3gJipRwvpG4WMJYSg2e2OtmGERX8ngf+r0
+# +dm1BXgxe++iaZTBAF+KtYRZaCllQjjyCbyLunvPJvqn7cHaoA8m0QFt1hPWhCQR
+# BNcT0foLJd545rfSmQ5OnCzm11JHHgKGZkUiWTos6r5NgLtNcp1tqYVo
 # SIG # End signature block
