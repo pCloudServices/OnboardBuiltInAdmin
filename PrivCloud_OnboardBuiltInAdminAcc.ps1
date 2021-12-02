@@ -28,7 +28,7 @@ $global:SafeName = "CyberArk_{0}_ADM"
 $global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
 # Script Version
-$ScriptVersion = "1.1"
+$ScriptVersion = "1.2"
 $debug = $false
 
 #region Log functions
@@ -864,6 +864,7 @@ Function Set-PVWAURL
     $script:URL_SystemHealthComponent = $URL_PVWAAPI + "/ComponentsMonitoringDetails/{0}"
     $script:URL_DomainDirectories = $URL_PVWAAPI + "/Configuration/LDAP/Directories"
     $script:URL_VaultMappings = $URL_PVWAAPI + "/Configuration/LDAP/Directories/{0}/mappings"
+    $script:URL_VaultVersion = $URL_PVWAPasswordVault + "/WebServices/PIMServices.svc/Server"
 }
 
 # @FUNCTION@ ======================================================================================================================
@@ -1148,12 +1149,20 @@ Function Insert-AuditorsGroup()
     {
         $BuiltIndAdminUserId = $GetUsersResponse.users.id
     }
-
-    #Get Auditor Group and search if user exists in it.
+    Try{
+    #Get Auditor Group and search if user exists in it. - 12.2
     $SearchGroupURL = $URL_UsersGroups + "?filter=groupName eq Auditors&includeMembers=True"
     $GetAuditorsGroupResponse = Invoke-RestMethod -Method Get -Uri ($SearchGroupURL) -Headers $s_pvwaLogonHeader -TimeoutSec 2700
+
+    #get Username Details and check if it has Auditors group - 11.7
+    $GetUserDetailsResponse = Invoke-RestMethod -Method Get -Uri ($URL_UserExtendedDetails -f $BuiltIndAdminUserId) -Headers $pvwaLogonHeader -ContentType "application/json" -TimeoutSec 2700
+    }
+    Catch{
+
+    }
+
     #Check if User is inside Auditors Group
-    if ($GetAuditorsGroupResponse.value.members.username -contains $s_BuiltInAdminUsername)
+    if (($GetAuditorsGroupResponse.value.members.username -contains $s_BuiltInAdminUsername) -or ($GetUserDetailsResponse.groupsMembership.groupName -contains "Auditors"))
     {
         Write-LogMessage -MSG "User is already part of Auditors Group, skipping..."
         #Save the Status of user in group or not and store it in a file in case the script was stopped.
@@ -1503,8 +1512,9 @@ Function Get-SafeNCreate
             Write-LogMessage -type Info -MSG "Granting safe permissions."
             foreach ($ldap in $LDAPVaultAdmins)
             {
+				Write-LogMessage -type Info -MSG "LDAP group `"$($ldap.DomainGroups)`""
                 $SafePermissions = @{
-                    "MemberName"  = $($ldap.DomainGroups)#.replace("{}","")
+                    "MemberName"  = $($ldap.DomainGroups)
                     "Permissions" = @{
                         "UseAccounts"                            = "true";
                         "RetrieveAccounts"                       = "true";
@@ -1678,6 +1688,9 @@ Function UpdatePlatformPSM
 {
     param($FirstPSM)
     
+if($FirstPSM -ne $null)
+{	
+	
     $Body = @"
 {
     "PSMServerId" : "$FirstPSM",
@@ -1700,13 +1713,18 @@ Function UpdatePlatformPSM
         $allplatformsresponse = Invoke-RestMethod -Method Get -Uri $URL_PlatformsFindAll -Headers $s_pvwaLogonHeader
         $PlatformNumId = $allplatformsresponse.Platforms | Where-Object { $_.platformid -eq $PlatformID } | Select-Object -ExpandProperty ID
         
-        Write-LogMessage -type Info -MSG "Updating Platform with valid PSM instance."
+        Write-LogMessage -type Info -MSG "Updating Platform with valid PSM instance: `"$FirstPSM`"."
         
         $response = Invoke-RestMethod -Uri ($URL_PlatformUpdatePSM -f $PlatformNumId) -Headers $s_pvwaLogonHeader -Method Put -ContentType "application/json" -Body $Body -TimeoutSec 2700
     }
     Catch
     {
         Write-LogMessage -type Error -MSG $_.Exception
+    }
+}
+    else
+    {
+        Write-LogMessage -type Info -MSG "Didn't find valid PSM to bind to platform, skipping..."
     }
 }
 
@@ -1745,18 +1763,21 @@ if (-not $debug)
     }
 }
 
-
 #Check all relevant files exist in the same folder as the script.
 [array]$Prerequisitefiles = @{PSMCC = "PSM-PVWA-v122.zip" }, @{PSMCCDisc = "PSM-PVWA-v122-Disc.zip" }, @{CyberArkPrivCloudPlatform = "CyberArkPrivCloud.zip" }
-foreach ($file in $Prerequisitefiles)
+foreach ($file in $Prerequisitefiles.values)
 {
-    if (-not(Test-Path "$PSScriptRoot\$($file.values)"))
+    if (-not(Test-Path "$PSScriptRoot\$file"))
     {
-        Write-Warning "Missing prerequisite file: `"$($file.values)`" please download it and run script again."
-        Pause
-        #Exit
+        Write-Warning "Missing prerequisite file: `"$file`" please download it and run script again."
+        $missingfiles = "true"
     }
 }
+    #After we display all missing files, exit the script.
+    if($missingfiles -eq "true"){
+        Pause
+        Exit
+    }
 
 #Cleanup log file if it gets too big
 if (Test-Path $LOG_FILE_PATH)
@@ -1904,8 +1925,8 @@ catch
 # SIG # Begin signature block
 # MIIfdgYJKoZIhvcNAQcCoIIfZzCCH2MCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAmTu4OZGqKJ+L0
-# 4438AUN/KKXPl6ulYFRtuZIXm/8pI6CCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB04Iqa4+yQDSS9
+# +EPtQxAOlneq7PyNy/o6Nr334ps52aCCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
 # NStkZdZqMA0GCSqGSIb3DQEBCwUAMFcxCzAJBgNVBAYTAkJFMRkwFwYDVQQKExBH
 # bG9iYWxTaWduIG52LXNhMRAwDgYDVQQLEwdSb290IENBMRswGQYDVQQDExJHbG9i
 # YWxTaWduIFJvb3QgQ0EwHhcNMTgwOTE5MDAwMDAwWhcNMjgwMTI4MTIwMDAwWjBM
@@ -1987,17 +2008,17 @@ catch
 # O0dsb2JhbFNpZ24gRXh0ZW5kZWQgVmFsaWRhdGlvbiBDb2RlU2lnbmluZyBDQSAt
 # IFNIQTI1NiAtIEczAgxUZhOjzncM/KH38lwwDQYJYIZIAWUDBAIBBQCgfDAQBgor
 # BgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEE
-# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgqqtYR4p+MViX
-# +ElqCBbXivRNyo3n7ZNlwZxsm/Y8f/QwDQYJKoZIhvcNAQEBBQAEggEAPEEQeltA
-# k2gXlmZ22pxLDxzxVa2EVW9uils2HNHQUMhFlWPC+Gs5uaSR9Ful8XUjy89Nira5
-# 9Q33dVdlkwVXn9epfL/eYqPvvkfP9Nt0/BPP1FOLQpCvE5EfVemZJlYPIM9uPLsw
-# EPR0qCP2Yz+bISW1v/3JHjY8fkkim8L0ZulYVGixrjv7zIKRBASxwfJF52CrQjud
-# IJWTbq9pgqBak/h8JFFuurULctCmBWex4MKHOILLj+UvLR+/nZYh/NDtvPCLdIM3
-# yKVha0zJM5iznYm3/zMwKPj1/BDM/MoFOKy4vLV2yw3ZKNKXgseCquDVnmTzU2D+
-# j8tSW5GxLVbkKKGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
+# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgwWwrWohlSkuY
+# 8kohf5ZTBoOdfUVURZM23Qv0pnyQsiowDQYJKoZIhvcNAQEBBQAEggEAgIZu+RB2
+# uD2asUB7TfFdaoqQ/hG9Cgj3G3DMCx+0q9vsX0lJ7QR3Jch5Y0lTLsOMdrwshpQe
+# svIP1aj7cRs/jgDsJYX8IzL/+ewdLbg3GuYVbegVOVqwX+g8R3OIZbdVwJTAP8+n
+# KvT42ySMGEpyuY3ApQRRjk48jpcPv/DxD6ErNIWYbnhp2PvcQr8UsaRT9NFjNN3R
+# k443qfNBBC5Ra3wvL4yTYMu5JhCX53XcUI7PVprpR3vMcH4tX/5FYXzrPG8/m8eu
+# AW3Q+cC5niDkgWtSwv36QPsk+7f0F/zj8mb5MZ8514eiHpXI1E0sWF3T7JFvSTVq
+# StkVJW50yz2iFaGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
 # AqCCDgUwgg4BAgEDMQ0wCwYJYIZIAWUDBAIBMIH/BgsqhkiG9w0BCRABBKCB7wSB
-# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBQopLCDUeWU3S4gZMSb
-# 1RonzAjKcAIVAOV0KWdmHNHK6nMh4Qu5VkvIEVCOGA8yMDIxMTEyODE1NDI1OVow
+# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBRJ4FnP4fOKAhqu7Dgr
+# MPysPESJuAIVAJVRQIhGGigV31hAF97baSwHvi5yGA8yMDIxMTIwMjE4NDcwMFow
 # AwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVjIENv
 # cnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEwLwYD
 # VQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEczoIIK
@@ -2061,13 +2082,13 @@ catch
 # BAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVz
 # dCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5n
 # IENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG9w0B
-# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTEyODE1NDI1OVow
-# LwYJKoZIhvcNAQkEMSIEIPge1uTGrG8l7F2kTK3TdYH1Kw3fwUalrBGkVDetT+1N
+# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTIwMjE4NDcwMFow
+# LwYJKoZIhvcNAQkEMSIEID1wcR4K40zTj5bSG20gSOi8uqtsb/xamf1EaY+tAAmK
 # MDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKCATz+
-# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCFok4XFwtcGAxX7dAxX0vNh5mQ81ZU
-# nzwYFLYG63RuOLmj8fU4fu5wzo+1vtIklilT3x6AlZgzxMke8uDjq4dae6O3dPZL
-# 3BaWK70FU60w/dal8heskolpXiMCM7E0l7kPTVBfPEk1/AoZgcnfMBq31CvYuqGm
-# gscuIsSQhrcZKv+9sl2Vt0sbHy3Tat3gJipRwvpG4WMJYSg2e2OtmGERX8ngf+r0
-# +dm1BXgxe++iaZTBAF+KtYRZaCllQjjyCbyLunvPJvqn7cHaoA8m0QFt1hPWhCQR
-# BNcT0foLJd545rfSmQ5OnCzm11JHHgKGZkUiWTos6r5NgLtNcp1tqYVo
+# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCMxzlKptdhGB4OqsrYFgQgT/jTUeva
+# tM4qcSgUZDe2Ta0FWA3HnMvPAjMgL0ebtYFW0es5R8LyFBPxrHAzeyBKs6F6h+Ss
+# gvOUL76xSmvTlMRVMW6rzJe8uAIftGBWeiS3fHexzkz2sdJ2XitVf15Rhipw+OJx
+# CNvtBv7I4TSp39+aD39oj3XwFpkrE8pQlvOsAWwZVuLtyc8d6rfNRL9UBbGwF/wa
+# hMwznP7dEd9oVO3PP/IAQ2SssUnU9esSGwpuMQXKL7uCR7Fme4HmjpfpCm64OKGK
+# fG0eE7qma1bSG75mJTxcrr7EJgcRvln59jYolxdZCyw+m3Bu0MpcOdVs
 # SIG # End signature block
