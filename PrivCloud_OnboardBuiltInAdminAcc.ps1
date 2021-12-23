@@ -28,7 +28,7 @@ $global:SafeName = "CyberArk_{0}_ADM"
 $global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
 # Script Version
-$ScriptVersion = "1.2"
+$ScriptVersion = "1.3"
 $debug = $false
 
 #region Log functions
@@ -302,12 +302,12 @@ Function Test-ScriptLatestVersion
         }
         else
         {
-            Throw "Test-ScriptLatestVersion: Couldn't match Script Version pattern ($versionPattern)"
+            Write-LogMessage -type Info -MSG "Test-ScriptLatestVersion: Couldn't match Script Version pattern ($versionPattern)"
         }
     }
     catch
     {
-        Throw $(New-Object System.Exception ("Test-ScriptLatestVersion: Couldn't download and check for latest version", $_.Exception))
+        Write-LogMessage -type Info -MSG ("Test-ScriptLatestVersion: Couldn't download and check for latest version", $_.Exception)
     }
     return $isLatestVersion
 }
@@ -1422,7 +1422,7 @@ Function Get-LDAPVaultAdmins
         $global:Directory = Invoke-RestMethod -Uri $Uri -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
         foreach ($dir in $Directory)
         {
-            $Mappings = Invoke-RestMethod -Uri ($URL_VaultMappings -f $($dir.DomainName)) -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
+            $Mappings += Invoke-RestMethod -Uri ($URL_VaultMappings -f $($dir.DomainName)) -Headers $s_pvwaLogonHeader -Method Get -TimeoutSec 2700
             $global:LDAPVaultAdmins = $Mappings | Where-Object { !(Compare-Object -ReferenceObject $MappingAuthorizations -DifferenceObject $_.MappingAuthorizations) }
             $global:DirNames += $dir.DomainName
         }
@@ -1925,8 +1925,8 @@ catch
 # SIG # Begin signature block
 # MIIfdgYJKoZIhvcNAQcCoIIfZzCCH2MCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB04Iqa4+yQDSS9
-# +EPtQxAOlneq7PyNy/o6Nr334ps52aCCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAdXHsmwOYCxAO6
+# TCDvezs6npXrYzypBeONWxFSMObXmqCCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
 # NStkZdZqMA0GCSqGSIb3DQEBCwUAMFcxCzAJBgNVBAYTAkJFMRkwFwYDVQQKExBH
 # bG9iYWxTaWduIG52LXNhMRAwDgYDVQQLEwdSb290IENBMRswGQYDVQQDExJHbG9i
 # YWxTaWduIFJvb3QgQ0EwHhcNMTgwOTE5MDAwMDAwWhcNMjgwMTI4MTIwMDAwWjBM
@@ -2008,17 +2008,17 @@ catch
 # O0dsb2JhbFNpZ24gRXh0ZW5kZWQgVmFsaWRhdGlvbiBDb2RlU2lnbmluZyBDQSAt
 # IFNIQTI1NiAtIEczAgxUZhOjzncM/KH38lwwDQYJYIZIAWUDBAIBBQCgfDAQBgor
 # BgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEE
-# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgwWwrWohlSkuY
-# 8kohf5ZTBoOdfUVURZM23Qv0pnyQsiowDQYJKoZIhvcNAQEBBQAEggEAgIZu+RB2
-# uD2asUB7TfFdaoqQ/hG9Cgj3G3DMCx+0q9vsX0lJ7QR3Jch5Y0lTLsOMdrwshpQe
-# svIP1aj7cRs/jgDsJYX8IzL/+ewdLbg3GuYVbegVOVqwX+g8R3OIZbdVwJTAP8+n
-# KvT42ySMGEpyuY3ApQRRjk48jpcPv/DxD6ErNIWYbnhp2PvcQr8UsaRT9NFjNN3R
-# k443qfNBBC5Ra3wvL4yTYMu5JhCX53XcUI7PVprpR3vMcH4tX/5FYXzrPG8/m8eu
-# AW3Q+cC5niDkgWtSwv36QPsk+7f0F/zj8mb5MZ8514eiHpXI1E0sWF3T7JFvSTVq
-# StkVJW50yz2iFaGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
+# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgC9eDGpKT8icC
+# +RtXCLggmnYSu50MinIMDSe+38Ec5t8wDQYJKoZIhvcNAQEBBQAEggEAEXVA/c08
+# 550wQxA5McXbJFblvyTNFBYd9KsaNrmwRawaHYsNZPo6VasCX801bQQyXJ3PbmkL
+# XkE2noAlbRBc3tvdhBlA9HCw1ogUvHxlLhec1zwdx4TD2S68G0hSz7qb0pvPZxOe
+# OQzxuo7gA9hBf6S0JKWheaEEt82eBKs6/Bv+fcKQCxkg/k6rnxlzT7bio/NxTm8o
+# o4G6ne4fq2TtFMX47a0IP0PEs8EqfQ7pOM9NUk3VHiuATBpf9oodjSHoZP1c0FlG
+# z2zmv7ehnWt+I7p1kT1z+VA2RhqoYq6dqGXCkXP26lfacShZkheJ2+9UXQPgQ1Kw
+# k66KA033o5iX9KGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
 # AqCCDgUwgg4BAgEDMQ0wCwYJYIZIAWUDBAIBMIH/BgsqhkiG9w0BCRABBKCB7wSB
-# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBRJ4FnP4fOKAhqu7Dgr
-# MPysPESJuAIVAJVRQIhGGigV31hAF97baSwHvi5yGA8yMDIxMTIwMjE4NDcwMFow
+# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBQWP1STx5SLPEXZHN30
+# GwkJbvpuFQIVAKQUk24LxMunhdwRL3Ad3k/eVgU4GA8yMDIxMTIyMzE0MDEzOVow
 # AwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVjIENv
 # cnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEwLwYD
 # VQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEczoIIK
@@ -2082,13 +2082,13 @@ catch
 # BAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVz
 # dCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5n
 # IENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG9w0B
-# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTIwMjE4NDcwMFow
-# LwYJKoZIhvcNAQkEMSIEID1wcR4K40zTj5bSG20gSOi8uqtsb/xamf1EaY+tAAmK
+# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTIyMzE0MDEzOVow
+# LwYJKoZIhvcNAQkEMSIEIF3iwTkDyz6iHrO+RDy2zMhSFGGla4wDcNAfWBldBIQL
 # MDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKCATz+
-# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCMxzlKptdhGB4OqsrYFgQgT/jTUeva
-# tM4qcSgUZDe2Ta0FWA3HnMvPAjMgL0ebtYFW0es5R8LyFBPxrHAzeyBKs6F6h+Ss
-# gvOUL76xSmvTlMRVMW6rzJe8uAIftGBWeiS3fHexzkz2sdJ2XitVf15Rhipw+OJx
-# CNvtBv7I4TSp39+aD39oj3XwFpkrE8pQlvOsAWwZVuLtyc8d6rfNRL9UBbGwF/wa
-# hMwznP7dEd9oVO3PP/IAQ2SssUnU9esSGwpuMQXKL7uCR7Fme4HmjpfpCm64OKGK
-# fG0eE7qma1bSG75mJTxcrr7EJgcRvln59jYolxdZCyw+m3Bu0MpcOdVs
+# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQB3e1r8q57Uo1TD2kDHDsiE5vE2HZ9T
+# j9UUYkqljGUj9ZOnYunFLkf/X5hOKMPcvyW481E22iivSjDdbhVBZPHWD5VRoq/O
+# UViaix79tEwTcJbzGjMovoasuthbKTsvw4PKTig579VedUE4v4om3OTUl5tPIT2K
+# hf2tA9xHSBSkFi/UyH+SVHXZ0juAEcZqISYQ/VfbbnRS1hwz+qIMWoBLdvqFi4tw
+# eJoKVrRoOqce1edSp3uqTjLAHmMq+oRW4geGB+UzDN1m7Ew9JX357nHXNVEZKR86
+# IJw3WIvj7Zjbz4U7dVN+hZwlw3Xii3yDZcYgPeb7373uvUq8B82zo5QP
 # SIG # End signature block
