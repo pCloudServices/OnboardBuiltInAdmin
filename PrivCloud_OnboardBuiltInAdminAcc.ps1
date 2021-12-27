@@ -28,7 +28,7 @@ $global:SafeName = "CyberArk_{0}_ADM"
 $global:DefaultChromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
 # Script Version
-$ScriptVersion = "1.3"
+$ScriptVersion = "1.4"
 $debug = $false
 
 #region Log functions
@@ -1831,6 +1831,7 @@ try
 {
     #Check if any CYBR components installed before proceeding
     $detectedComponent = $(Find-Components -Component "All" -FindOne)
+    $FindPSM = $(Find-Components -Component PSM)
     If (($null -ne $detectedComponent) -and ($detectedComponent.Name.Count -gt 0))
     {
         # Set PVWA URL
@@ -1855,29 +1856,38 @@ try
         Write-LogMessage -type Info -MSG "START Auditor Flow"
         Insert-AuditorsGroup
         Write-LogMessage -type Info -MSG "START Import Plugins Flow"
-        # Import CC and Bind it to Platform
-        Foreach ($psmcomp in @($PSMCCID, $PSMCCDiscID))
-        {
-            $connectionCompExists = VerifyComponentExists -Uri ($URL_ConnectionComponentVerify -f $psmcomp) -ComponentName $psmcomp
-            if ($connectionCompExists.ConnectionComponentID -eq $psmcomp)
-            {
-                Write-LogMessage -type Success -MSG "Verified `"$psmcomp`" exists."
+        # If PSM isn't installed, we skip the entire Connection Component Section
+        If($FindPSM){
+            #Get Chrome Path and check if it's whitelisted in applocker, if not we skip this step until the user whitelists chrome.
+            $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty `(default`)
+            $ChromeApplockerStatus = Try{Get-AppLockerPolicy -local | Test-AppLockerPolicy -path $actualChromePath -User PSMShadowUsers -Filter Denied -ErrorAction SilentlyContinue}Catch{}
+            if($ChromeApplockerStatus){
+                Write-LogMessage -type Warning -MSG "Chrome isn't whitelisted in machine Applocker, we highly recommend whitelisting chrome so you could connect through PSM with the account we onboard (more info in readme file)."
             }
-            Else
-            {
-                $File_Path = "$PSScriptRoot\$psmcomp.zip"
-                #Check if Chrome exists and path32/64 and adjust it in the file.
-                $actualChromePath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty `(default`)
-                if (($DefaultChromePath -ne $actualChromePath) -and ($actualChromePath -ne $null))
+            Else{
+                # Import CC and Bind it to Platform
+                Foreach ($psmcomp in @($PSMCCID, $PSMCCDiscID))
                 {
-                    Update-ZipWithNewChrome -file_path $File_Path -BrowserPath $actualChromePath
+                    $connectionCompExists = VerifyComponentExists -Uri ($URL_ConnectionComponentVerify -f $psmcomp) -ComponentName $psmcomp
+                    if ($connectionCompExists.ConnectionComponentID -eq $psmcomp)
+                    {
+                        Write-LogMessage -type Success -MSG "Verified `"$psmcomp`" exists."
+                    }
+                    Else
+                    {
+                        $File_Path = "$PSScriptRoot\$psmcomp.zip"
+                        #Check if Chrome exists and path32/64 and adjust it in the file.
+                        if (($DefaultChromePath -ne $actualChromePath) -and ($actualChromePath -ne $null))
+                        {
+                            Update-ZipWithNewChrome -file_path $File_Path -BrowserPath $actualChromePath
+                        }
+                        Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
+                        $Input_File = $(Read-File -File_Path $File_Path)
+                        Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
+                    }
                 }
-                Write-LogMessage -type Info -MSG "`"$psmcomp`" doesn't exist, will attempt to import it..."
-                $Input_File = $(Read-File -File_Path $File_Path)
-                Import -Input_File $Input_File -URL_Import $URL_ConnectionComponentImport -ComponentName $psmcomp
             }
         }
-        
         # Import CyberArk platform if it doesn't exist
         $platformExists = VerifyComponentExists -Uri ($URL_PlatformVerify -f $PlatformID) -ComponentName $PlatformID
         if ($platformExists.platformID -eq $platformID)
@@ -1925,8 +1935,8 @@ catch
 # SIG # Begin signature block
 # MIIfdgYJKoZIhvcNAQcCoIIfZzCCH2MCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAK2E9LDdCLzD90
-# acZEY+D8jXQFuFzod0hVeRukXfkBG6CCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCARDP4SqlVScImj
+# dO6oRO9FOTp/DQWLTJ9IJhDWzfPtT6CCDnUwggROMIIDNqADAgECAg0B7l8Wnf+X
 # NStkZdZqMA0GCSqGSIb3DQEBCwUAMFcxCzAJBgNVBAYTAkJFMRkwFwYDVQQKExBH
 # bG9iYWxTaWduIG52LXNhMRAwDgYDVQQLEwdSb290IENBMRswGQYDVQQDExJHbG9i
 # YWxTaWduIFJvb3QgQ0EwHhcNMTgwOTE5MDAwMDAwWhcNMjgwMTI4MTIwMDAwWjBM
@@ -2008,17 +2018,17 @@ catch
 # O0dsb2JhbFNpZ24gRXh0ZW5kZWQgVmFsaWRhdGlvbiBDb2RlU2lnbmluZyBDQSAt
 # IFNIQTI1NiAtIEczAgxUZhOjzncM/KH38lwwDQYJYIZIAWUDBAIBBQCgfDAQBgor
 # BgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEE
-# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgFxwDRcr7UNfF
-# fzlBsdHRcQ27H7OkzRtPhQrm6zlaPCQwDQYJKoZIhvcNAQEBBQAEggEASR9yySib
-# ZfcCMAgyvTwlIKfGlqSzpdvRHKD5Q1N53QdX3xkhuFx9ZQvEpFjJxRaDbxHdQ2s5
-# wRVkBPCAtGWLXuHVzlO7M5OI+2NxR7ckKfJbKj9mi8wlxXsoI+o9eTYtPHNMFcor
-# I/IiQpPKeAPkvg1T9z/AlrRfkmqtyi9lOuFLMEb5oR9kAPV5zUSkbjUm0xV2e9rb
-# yQi26jfWwV9YAxKb/D0TqCXaG1LINy9byTBkQY6oV1li/GzWE2dn84tW1JG8Zj8c
-# VWXOeFWb3jj2TGX0fap/Ae9T15/xcaBb9s7sTN5vsxnUT7MGnFKhwGBDSW+zGJoo
-# MNPrxMqc3Ui+y6GCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
+# AYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0BCQQxIgQgTPfSQ9tBwpna
+# t8g6STyUWvhsSSTrcvFbpkzE6AivDtUwDQYJKoZIhvcNAQEBBQAEggEAWejJJJHF
+# y/mTbvEg2MOgz3qvGLfYtLMwRWIi7gOGyNyDbkLeRGySQuWYv5WXVrIPR3MstxPp
+# k+4kMlBuNlaabAajTnxMj77PbyZReh0CpZ7GntljivSlFjPkjZKKZBLfsRemVXAn
+# uTAru8aNiDT3AuZghTX1ybKiAqHm9NwxjJLl9rThYa8xtWfDZWx5KnN8Bcu4AuIT
+# fFJqyi6s7tscntkFFObeQJVKNhCQ9uDPzxim3aYqftWtxNodgaBg4jjSxPh26Gqj
+# 7t7wSM1DvM0fQISExbbGoz+SnuQ8b7pc4ryJdO3zVXhHHGmsz9nUsBl7/+TCVH90
+# wraaANr8Xqig7qGCDiwwgg4oBgorBgEEAYI3AwMBMYIOGDCCDhQGCSqGSIb3DQEH
 # AqCCDgUwgg4BAgEDMQ0wCwYJYIZIAWUDBAIBMIH/BgsqhkiG9w0BCRABBKCB7wSB
-# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBR7Oe/FBOoHKSgGaZmn
-# t9kE4T8SdAIVAIHa5N0HoJLM+K3MZSXLyQ1F7MRCGA8yMDIxMTIyMzE0MjYyNlow
+# 7DCB6QIBAQYLYIZIAYb4RQEHFwMwITAJBgUrDgMCGgUABBQUutJAN66ozC1t2xUr
+# rSnNxua61gIVAJ7iqX17zeWButSj2zWmnxHRHR4/GA8yMDIxMTIyNzIyNTYxMFow
 # AwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVjIENv
 # cnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEwLwYD
 # VQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEczoIIK
@@ -2082,13 +2092,13 @@ catch
 # BAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVz
 # dCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5n
 # IENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG9w0B
-# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTIyMzE0MjYyNlow
-# LwYJKoZIhvcNAQkEMSIEIIt8IJCbjAoxHsSntyNwFNR0K/0c4GaSgSVwCre9TjML
+# CQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIxMTIyNzIyNTYxMFow
+# LwYJKoZIhvcNAQkEMSIEIG8eccq+b/dOcNJgw0onfobPB/YMdv7oYaSqGawbaQT2
 # MDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKCATz+
-# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQB36Mo+a4CsrEcoCoF9Wa/H5nnGSDRd
-# xbE/TKbBJuKVQ0Bnm0qM4XMDwiAXUvBkW6fr6k8EBShJDmDp9qOEx8y8C3Xmp0Q8
-# aDHblLzGxu8FMYC10o1mlSLdp3bG164WxgtiieIw9gWU/Rzb2S+wKEAlH3V+pv/B
-# fXwGc3XaWLnaF+hVHVL8Bvon2zVRAWNBRQk0yUrBnqvMJ5tcmBhf/to/6/+yHiaU
-# 5tLdzxPvJ4fJvdNAN0vqQhn0g87B3k591IgIoWe5xn4jlGPyrflO9A5FXOGnfafv
-# bszDmW/b6G9w3/lf1IR7J3w+1TXYH/LZCx2Cmhdy1CmNUkJFPmoqC3Ll
+# 9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQBEhcuAPcLWUkm+RAT3nE3sFRl6qkNw
+# v+q4G2i+dkxKqefsOmno3LRHo5TMUk59ydqIKGfOn5Skrk0aG863jPrWSfc5+2vl
+# gzoZ0eKiW7p48ilZm8HEmiASHRCJ4txXA9ya+2VfUkSFoByuZe4XDJfphLrez0pC
+# LwB32vvqpIBl0TpKk5NeX5PR0upMTbuZ9fP590KINFBSE1yGoq1op4Hs0GWt7/Zp
+# OXJ1EFCSfPIYhPw9oCzqCh+2/v64GcMXXQRXdqdR/vc6Gi6C8myhE3g8K8BjB3XF
+# qgAyN/iU4G06cHhXlvvLTuJ/ysuYVG8HAc+zWsZ/+hY6gKbA7Fvx4Nig
 # SIG # End signature block
